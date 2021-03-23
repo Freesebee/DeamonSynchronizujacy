@@ -1,6 +1,6 @@
 #include <stdio.h>
 
 int main() {
-    printf("Hello, World!\n");
+    printf("Pierwsza zmiana w repozytorium!\n");
     return 0;
 }
