@@ -1,6 +1,6 @@
 #include <stdio.h>
 
 int main() {
-    printf("Pierwsza zmiana w repozytorium!\n");
+    printf("Nowa zmiana w repozytorium!\n");
     return 0;
 }
