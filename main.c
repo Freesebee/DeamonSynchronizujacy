@@ -66,7 +66,7 @@ int main(int argc, char** argv)
         printf("opendir() sie wyjebal na plecy z jakiegos innego powodu\n");
         return -1;
     }
-/* tu należy wykonać czynności demona… */
+/* tu należy wykonać czynności demona…   */
 
 
 
