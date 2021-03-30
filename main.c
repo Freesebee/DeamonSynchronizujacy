@@ -8,6 +8,9 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <linux/fs.h>
+
+pid_t fork();
+int setsid();
 int main(int argc, char** argv)
 {
     if(argc < 3) //argv[0] to nazwa ścieżka do .exe
@@ -24,13 +27,13 @@ int main(int argc, char** argv)
             pid_t pid;
             int i;
             /* stwórz nowy proces */
-            pid = fork( );
+            pid = fork();
             if (pid == -1)
                 return -1;
             else if (pid != 0)
                 exit (EXIT_SUCCESS);
             /* stwórz nową sesję i grupę procesów */
-            if (setsid( ) == -1)
+            if (setsid() == -1)
                 return -1;
             /* ustaw katalog roboczy na katalog główny */
             if (chdir ("/") == -1)
@@ -66,10 +69,11 @@ int main(int argc, char** argv)
         printf("opendir() sie wyjebal na plecy z jakiegos innego powodu\n");
         return -1;
     }
-/* tu należy wykonać czynności demona…   */
+/* tu należy wykonać czynności demona…  */
 
 
 
 
     return 0;
 }
+
