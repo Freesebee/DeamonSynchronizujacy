@@ -22,6 +22,21 @@ int setsid();
 
 //zamykanie logu jest opcjonalne
 //closelog();
+
+//Sprawdza czy plik o podanej  sciezce jest katalogiem
+int isDirectory(const char *path) {
+    struct stat statbuffer;
+    if (stat(path, &statbuffer) != 0)
+        return 0;
+    return S_ISDIR(statbuffer.st_mode);
+}
+int isRegularFile(const char *path) {
+    struct stat statbuffer;
+    if (stat(path, &statbuffer) != 0)
+        return 0;
+    return S_ISREG(statbuffer.st_mode);
+}
+
 int main(int argc, char** argv)
 {
     if(argc < 3) //argv[0] to nazwa ścieżka do .exe
