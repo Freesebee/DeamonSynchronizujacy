@@ -26,15 +26,15 @@ int setsid();
 //Sprawdza czy plik o podanej  sciezce jest katalogiem
 int isDirectory(const char *path) {
     struct stat statbuffer;
-    if (stat(path, &statbuffer) != 0)
+    if (stat(path, &statbuffer) != 0) //success = 0
         return 0;
-    return S_ISDIR(statbuffer.st_mode);
+    return S_ISDIR(statbuffer.st_mode); //0 jesli NIE jest katalogiem
 }
 int isRegularFile(const char *path) {
     struct stat statbuffer;
-    if (stat(path, &statbuffer) != 0)
+    if (stat(path, &statbuffer) != 0) //success = 0
         return 0;
-    return S_ISREG(statbuffer.st_mode);
+    return S_ISREG(statbuffer.st_mode); //0 jesli NIE jest katalogiem
 }
 
 int main(int argc, char** argv)
