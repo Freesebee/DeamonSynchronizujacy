@@ -8,9 +8,20 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <linux/fs.h>
-
+#include <syslog.h> //biblioteka do logow
 pid_t fork();
 int setsid();
+//otwiera logi, pierwszy argument jest dodawany na poczatek kazdego logu
+//drugi to specjalne opcje, mozna wrzucic kilka za pomoca |
+//trzeci wskazuje jaki typ programu loguje wiadomosci
+//openlog("WyjebaloNamDemona",LOG_PID, LOG_LOCAL1)
+
+
+//wpisuje do logow, pierwszy argument okresla importance logu, drugi to wpisywany tekst
+//syslog(LOG_NOTICE, "cokolwiek")
+
+//zamykanie logu jest opcjonalne
+//closelog();
 int main(int argc, char** argv)
 {
     if(argc < 3) //argv[0] to nazwa ścieżka do .exe
