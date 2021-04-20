@@ -54,11 +54,6 @@ int checkArguments(int argc, char** argv)
         printf("Sciezka zrodlowa nie jest katalogiem\n");
         return -1;
     }
-//    else if (ENOENT == errno)
-//    {
-//        printf("Katalog zrodlowy nie istnieje\n");
-//        return -1;
-//    }
 
     //Sprawdzanie czy sciezka docelowa to katalog
     if (isDirectory(argv[2]) != 0)
@@ -66,11 +61,6 @@ int checkArguments(int argc, char** argv)
         printf("Sciezka docelowa nie jest katalogiem\n");
         return -1;
     }
-//    else if (ENOENT == errno)
-//    {
-//        printf("Katalog docelowy nie istnieje\n");
-//        return -1;
-//    }
 
     return 0;
 }
