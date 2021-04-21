@@ -136,10 +136,12 @@ void SleepingAnimation(sleepTime)
     }
 }
 
-void Synchronization(char* source, char* dest, int sleepTime)
+void Synchronization(char* source, char* dest)
 {
-    SleepingAnimation(sleepTime);
-    // zastąp przez: sleep(sleepTime);
+    /* przeadresuj deskryptory plików 0, 1, 2 na /dev/null */
+    open ("/dev/null", O_RDWR); /* stdin */
+    dup (0); /* stdout */
+    dup (0); /* stderror */
 
     /* Główny kod programu */
 }
@@ -151,12 +153,10 @@ int main(int argc, char** argv)
 
     InitializeDaemon();
 
-    /* przeadresuj deskryptory plików 0, 1, 2 na /dev/null */
-    open ("/dev/null", O_RDWR); /* stdin */
-    dup (0); /* stdout */
-    dup (0); /* stderror */
+    SleepingAnimation(sleepTime);
+    // zastąp przez: sleep(sleepTime);
 
-    Synchronization(argv[1], argv[2], sleepTime);
+    Synchronization(argv[1], argv[2]);
 
     return 0;
 }
