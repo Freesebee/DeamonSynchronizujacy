@@ -9,21 +9,25 @@
 #include <unistd.h>
 #include <linux/fs.h>
 #include <syslog.h> //biblioteka do logow
-pid_t fork();
-int setsid();
-//otwiera logi, pierwszy argument jest dodawany na poczatek kazdego logu
-//drugi to specjalne opcje, mozna wrzucic kilka za pomoca |
-//trzeci wskazuje jaki typ programu loguje wiadomosci
-//openlog("WyjebaloNamDemona",LOG_PID, LOG_LOCAL1)
 
+pid_t pid, sid; //ID procesu oraz sesji demona
 
-//wpisuje do logow, pierwszy argument okresla importance logu, drugi to wpisywany tekst
+//pid_t fork();
+
+//int setsid();
+
+// otwiera logi, pierwszy argument jest dodawany na poczatek kazdego logu
+// drugi to specjalne opcje, mozna wrzucic kilka za pomoca |
+// trzeci wskazuje jaki typ programu loguje wiadomosci
+//openlog("DAEMON ERROR",LOG_PID, LOG_LOCAL1);
+
+// wpisuje do logow, pierwszy argument okresla importance logu, drugi to wpisywany tekst
 //syslog(LOG_NOTICE, "cokolwiek")
 
-//zamykanie logu jest opcjonalne
+// zamykanie logu jest opcjonalne
 //closelog();
 
-//Sprawdza czy plik o podanej  sciezce jest katalogiem
+// Sprawdza czy plik o podane sj  sciezce jest katalogiem
 int isDirectory(const char *path) {
     struct stat statbuffer;
     if (stat(path, &statbuffer) != 0) //success = 0
@@ -31,7 +35,7 @@ int isDirectory(const char *path) {
     return S_ISDIR(statbuffer.st_mode); //0 jesli NIE jest katalogiem
 }
 
-//Sprawdza czy plik o podanej  sciezce jest plikiem
+// Sprawdza czy plik o podanej  sciezce jest plikiem
 int isRegularFile(const char *path) {
     struct stat statbuffer;
     if (stat(path, &statbuffer) != 0) //success = 0
@@ -39,64 +43,120 @@ int isRegularFile(const char *path) {
     return S_ISREG(statbuffer.st_mode); //0 jesli NIE jest katalogiem
 }
 
-int checkArguments(int argc, char** argv)
+void CheckArguments(int argc, char** argv, int * sleepTimePointer)
 {
-    //argv[0] to nazwa ścieżka do .exe
-    if(argc < 3)
+    switch(argc) // argv[0] to ścieżka do pliku .exe
     {
-        printf("Program przyjmuje co najmniej 2 argumenty\n");
-        return -1;
+        case 3:
+            *sleepTimePointer = 300;
+            break;
+        case 5:
+            // Dodatkowa opcja -R pozwalająca na rekurencyjną synchronizację katalogów
+            // (teraz pozycje będące katalogami nie są ignorowane)
+
+            // brak break, gdyż należy zainicjalozować sleepTimePointer
+        case 4:
+            *sleepTimePointer = (int) argv[3];
+            break;
+        default:
+            printf("Program przyjmuje 2 lub 3 argumenty\n");
+            exit(EXIT_FAILURE);
     }
 
-    //Sprawdzanie czy sciezka zrodlowa to katalog
-    if (isDirectory(argv[1]) != 0)
+    // Sprawdzanie czy sciezka zrodlowa to katalog
+    if (isDirectory(argv[1]))
     {
         printf("Sciezka zrodlowa nie jest katalogiem\n");
-        return -1;
+        exit(EXIT_FAILURE);
     }
 
-    //Sprawdzanie czy sciezka docelowa to katalog
-    if (isDirectory(argv[2]) != 0)
+    // Sprawdzanie czy sciezka docelowa to katalog
+    if (isDirectory(argv[2]))
     {
         printf("Sciezka docelowa nie jest katalogiem\n");
-        return -1;
+        exit(EXIT_FAILURE);
+    }
+}
+
+void InitializeDaemon()
+{
+    /* Stworzenie nowego procesu */
+    pid = fork();
+
+    switch (pid)
+    {
+        case -1:
+            printf("Nie przypisano id procesu\n");
+            exit (EXIT_FAILURE);
+        case 0:
+            // Instrukcje procesu potomnego
+            break;
+        default:
+            // Instrukcje procesu macierzystego
+            // exit (EXIT_SUCCESS);
+            break;
     }
 
-    return 0;
+    /* Zmiana praw dostępu do plików za pomocą maski użytkownika */
+    umask(0);
+
+    /* Otworzenie pliku z logami */
+    //openlog();
+
+    /* Stworzenie nowej sesji i grupy procesów */
+    sid = setsid();
+
+    switch (sid)
+    {
+        case -1:
+            printf("Nie przypisano id sesji\n");
+            exit (EXIT_FAILURE);
+        default:
+            break;
+    }
+
+    /* Ustaw katalog roboczy na katalog główny (root) */
+    if (chdir ("/")) {
+        printf("Nie udało się ustawić katalogu roboczego na katalog główny\n");
+        exit (EXIT_FAILURE);
+    }
+
+    /* Zamknięcie standardowych deksryptorów plików */
+    close(STDIN_FILENO);
+    close(STDOUT_FILENO);
+    close(STDERR_FILENO);
+}
+
+void SleepingAnimation(sleepTime)
+{
+    printf("Z");
+    for (int i = 0; i < sleepTime-1; ++i) {
+        sleep(1);
+        printf("z");
+    }
+}
+
+void Synchronization(char* source, char* dest, int sleepTime)
+{
+    SleepingAnimation(sleepTime);
+    // zastąp przez: sleep(sleepTime);
+
+    /* Główny kod programu */
 }
 
 int main(int argc, char** argv)
 {
-    if(checkArguments(argc, argv) != 0){
-        return -1;
-    }
+    int sleepTime;
+    CheckArguments(argc, argv, &sleepTime);
 
-    pid_t pid;
-    int i;
-    /* stwórz nowy proces */
-    pid = fork();
-    if (pid == -1)
-        return -1;
-    else if (pid != 0)
-        exit (EXIT_SUCCESS);
-    /* stwórz nową sesję i grupę procesów */
-    if (setsid() == -1)
-        return -1;
-    /* ustaw katalog roboczy na katalog główny */
-    if (chdir ("/") == -1)
-        return -1;
-    /* zamknij wszystkie pliki otwarte - użycie opcji NR_OPEN to przesada, lecz działa */
-    for (i = 0; i < NR_OPEN; i++)
-        close (i);
+    InitializeDaemon();
+
     /* przeadresuj deskryptory plików 0, 1, 2 na /dev/null */
     open ("/dev/null", O_RDWR); /* stdin */
     dup (0); /* stdout */
     dup (0); /* stderror */
 
-/* tu należy wykonać czynności demona…  */
-
-
-
+    Synchronization(argv[1], argv[2], sleepTime);
 
     return 0;
 }
