@@ -59,7 +59,7 @@ void CheckArguments(int argc, char** argv, int * sleepTimePointer)
             *sleepTimePointer = (int) argv[3];
             break;
         default:
-            printf("Program przyjmuje 2 lub 3 argumenty\n");
+            printf("Program przyjmuje 2, 3 lub 4 argumenty\n");
             exit(EXIT_FAILURE);
     }
 
