@@ -11,6 +11,7 @@
 #include <ctype.h>
 #include <syslog.h> //biblioteka do logow
 #include <stdbool.h>
+#include <signal.h>
 
 #define DEFAULT_SLEEP_TIME 300
 
@@ -43,6 +44,24 @@ int isRegularFile(const char *path) {
     if (stat(path, &statbuffer) != 0) //success = 0
         return 0;
     return S_ISREG(statbuffer.st_mode); //0 jesli NIE jest katalogiem
+}
+
+// /bin/kill -s SIGUSR1 PID aby obudzić
+void WakeUpDaemon(int signal)
+{
+    syslog(LOG_CONS, "WAKING UP DAEMON WITH SIGUSR1");
+}
+
+void Sleeping()
+{
+    signal(SIGUSR1, WakeUpDaemon);
+
+    syslog(LOG_NOTICE, "GOING TO SLEEP\n");
+
+    sleep(sleepTime);
+
+    syslog(LOG_NOTICE, "DAEMON WAKES UP\n");
+
 }
 
 void CheckArguments(int argc, char** argv)
@@ -124,7 +143,8 @@ void CheckArguments(int argc, char** argv)
 void InitializeDaemon()
 {
     /* Stworzenie nowego procesu */
-    switch (fork())
+    pid_t pid = fork();
+    switch (pid)
     {
         case -1:
             printf("Nie przypisano id procesu\n");
@@ -134,6 +154,7 @@ void InitializeDaemon()
             break;
 
         default: // Instrukcje procesu macierzystego
+            printf("SYNCHRONIZER PID: %d\n", (int)pid);
             exit (EXIT_SUCCESS);
             break;
     }
@@ -182,11 +203,12 @@ int main(int argc, char** argv)
 
     InitializeDaemon();
 
-    /* Otworzenie pliku z logami: /var/log/syslog */
+    /* Otworzenie pliku z logami */
+    /* cat /var/log/syslog | grep -i SYNCHRONIZER */
     openlog("SYNCHRONIZER",LOG_PID, LOG_DAEMON);
     syslog(LOG_NOTICE, "DAEMON SUMMONED\n");
 
-    sleep(sleepTime);
+    Sleeping();
 
     //Synchronization(source, dest, allowRecursion);
 
