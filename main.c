@@ -8,18 +8,20 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <linux/fs.h>
+#include <ctype.h>
 #include <syslog.h> //biblioteka do logow
+#include <stdbool.h>
 
-pid_t pid, sid; //ID procesu oraz sesji demona
+#define DEFAULT_SLEEP_TIME 300
 
-//pid_t fork();
-
-//int setsid();
+int sleepTime; // czas snu Daemona
+char* source, dest; // Ścieżki do plików/katalogów
+bool allowRecursion; // Tryb umożliwiający rekurencyjną synchronizację
 
 // otwiera logi, pierwszy argument jest dodawany na poczatek kazdego logu
 // drugi to specjalne opcje, mozna wrzucic kilka za pomoca |
 // trzeci wskazuje jaki typ programu loguje wiadomosci
-//openlog("DAEMON ERROR",LOG_PID, LOG_LOCAL1);
+//openlog("DAEMON:",LOG_PID, LOG_LOCAL1);
 
 // wpisuje do logow, pierwszy argument okresla importance logu, drugi to wpisywany tekst
 //syslog(LOG_NOTICE, "cokolwiek")
@@ -43,21 +45,54 @@ int isRegularFile(const char *path) {
     return S_ISREG(statbuffer.st_mode); //0 jesli NIE jest katalogiem
 }
 
-void CheckArguments(int argc, char** argv, int * sleepTimePointer)
+void CheckArguments(int argc, char** argv)
 {
     switch(argc) // argv[0] to ścieżka do pliku .exe
     {
         case 3:
-            *sleepTimePointer = 300;
+            sleepTime = DEFAULT_SLEEP_TIME;
+            allowRecursion = false;
             break;
-        case 5:
-            // Dodatkowa opcja -R pozwalająca na rekurencyjną synchronizację katalogów
-            // (teraz pozycje będące katalogami nie są ignorowane)
 
-            // brak break, gdyż należy zainicjalozować sleepTimePointer
         case 4:
-            *sleepTimePointer = (int) argv[3];
+            sleepTime = atoi(argv[3]);
+
+            if(argv[3] == "-R")
+            {
+                allowRecursion = true;
+                sleepTime = DEFAULT_SLEEP_TIME;
+            }
+            else if (sleepTime == 0)
+            {
+                printf("Czas snu musi byc dodatnia liczba calkowita\n");
+                exit(EXIT_FAILURE);
+            }
+            else
+            {
+                allowRecursion = false;
+            }
             break;
+
+        case 5:
+            printf("Niezaimplementowane...\n");
+            exit(EXIT_FAILURE);
+
+            if(argv[3] == "-R")
+            {
+                allowRecursion = true;
+            }
+            else if (atoi(argv[3]))
+            {
+                printf("Czas snu musi byc liczba calkowita\n");
+                exit(EXIT_FAILURE);
+            }
+            else
+            {
+                allowRecursion = false;
+            }
+
+            break;
+
         default:
             printf("Program przyjmuje 2, 3 lub 4 argumenty\n");
             exit(EXIT_FAILURE);
@@ -69,6 +104,10 @@ void CheckArguments(int argc, char** argv, int * sleepTimePointer)
         printf("Sciezka zrodlowa nie jest katalogiem\n");
         exit(EXIT_FAILURE);
     }
+    else
+    {
+        source = argv[1];
+    }
 
     // Sprawdzanie czy sciezka docelowa to katalog
     if (isDirectory(argv[2]))
@@ -76,47 +115,42 @@ void CheckArguments(int argc, char** argv, int * sleepTimePointer)
         printf("Sciezka docelowa nie jest katalogiem\n");
         exit(EXIT_FAILURE);
     }
+    else
+    {
+        dest = argv[2];
+    }
 }
 
 void InitializeDaemon()
 {
     /* Stworzenie nowego procesu */
-    pid = fork();
-
-    switch (pid)
+    switch (fork())
     {
         case -1:
             printf("Nie przypisano id procesu\n");
             exit (EXIT_FAILURE);
-        case 0:
-            // Instrukcje procesu potomnego
+
+        case 0: // Instrukcje procesu potomnego
             break;
-        default:
-            // Instrukcje procesu macierzystego
-            // exit (EXIT_SUCCESS);
+
+        default: // Instrukcje procesu macierzystego
+            exit (EXIT_SUCCESS);
             break;
     }
 
     /* Zmiana praw dostępu do plików za pomocą maski użytkownika */
     umask(0);
 
-    /* Otworzenie pliku z logami */
-    //openlog();
-
     /* Stworzenie nowej sesji i grupy procesów */
-    sid = setsid();
-
-    switch (sid)
+    if (setsid() < 0)
     {
-        case -1:
-            printf("Nie przypisano id sesji\n");
-            exit (EXIT_FAILURE);
-        default:
-            break;
+        printf("Nie przypisano id sesji\n");
+        exit(EXIT_FAILURE);
     }
 
     /* Ustaw katalog roboczy na katalog główny (root) */
-    if (chdir ("/")) {
+    if (chdir ("/"))
+    {
         printf("Nie udało się ustawić katalogu roboczego na katalog główny\n");
         exit (EXIT_FAILURE);
     }
@@ -127,16 +161,7 @@ void InitializeDaemon()
     close(STDERR_FILENO);
 }
 
-void SleepingAnimation(sleepTime)
-{
-    printf("Z");
-    for (int i = 0; i < sleepTime-1; ++i) {
-        sleep(1);
-        printf("z");
-    }
-}
-
-void Synchronization(char* source, char* dest)
+void Synchronization(char* source, char* dest, bool allowRecursion)
 {
     /* przeadresuj deskryptory plików 0, 1, 2 na /dev/null */
     open ("/dev/null", O_RDWR); /* stdin */
@@ -148,16 +173,26 @@ void Synchronization(char* source, char* dest)
 
 int main(int argc, char** argv)
 {
-    int sleepTime;
-    CheckArguments(argc, argv, &sleepTime);
+//    ZMIENNNE GLOBALNE:
+//    int sleepTime; // czas snu Daemona
+//    char* source, dest; // Ścieżki do plików/katalogów
+//    bool allowRecursion; // Tryb umożliwiający rekurencyjną synchronizację
+
+    CheckArguments(argc, argv);
 
     InitializeDaemon();
 
-    SleepingAnimation(sleepTime);
-    // zastąp przez: sleep(sleepTime);
+    /* Otworzenie pliku z logami: /var/log/syslog */
+    openlog("SYNCHRONIZER",LOG_PID, LOG_DAEMON);
+    syslog(LOG_NOTICE, "DAEMON SUMMONED\n");
 
-    Synchronization(argv[1], argv[2]);
+    sleep(sleepTime);
 
-    return 0;
+    //Synchronization(source, dest, allowRecursion);
+
+    syslog(LOG_NOTICE, "DAEMON EXORCISMED\n");
+    closelog();
+
+    exit(EXIT_SUCCESS);
 }
 
