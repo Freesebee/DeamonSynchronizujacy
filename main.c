@@ -215,6 +215,8 @@ int main(int argc, char **argv) {
 
     Sleeping();
 
+    //TODO: Sprawdź czy po pobudce katalogi istnieją
+
     //Synchronization(source, dest, allowRecursion);
 
     syslog(LOG_NOTICE, "DAEMON EXORCUMCISED\n");
