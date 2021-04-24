@@ -12,11 +12,14 @@
 #include <syslog.h> //biblioteka do logow
 #include <stdbool.h>
 #include <signal.h>
+#include <limits.h>
+#include <string.h>
 
-#define DEFAULT_SLEEP_TIME 300
+#define DEFAULT_SLEEP_TIME 300 // domyślny czas snu (5 min)
 
 int sleepTime; // czas snu Daemona
-char *source, dest; // Ścieżki do plików/katalogów
+char *source; // ścieżka do katalogu źródłowego
+char *dest; // ścieżka do katalogu docelowego
 bool allowRecursion; // Tryb umożliwiający rekurencyjną synchronizację
 
 // otwiera logi, pierwszy argument jest dodawany na poczatek kazdego logu
@@ -46,10 +49,33 @@ int isRegularFile(const char *path) {
     return S_ISREG(statbuffer.st_mode); //0 jesli NIE jest katalogiem
 }
 
+// Sprawdza czy plik o podanej ścieżce jest dowiązaniem symbolicznym
+int isSymbolicLink(const char *path)
+{
+    struct stat buf;
+    int x = lstat (path, &buf);
+
+    if (S_ISLNK(buf.st_mode))
+        return 1; // Jest dowiązaniem symbolicznym
+    else
+        return 0;
+
+/* TODO: Gdy zadziała wywalić poniższy kod */
+
+//    x = stat ("junklink", &buf);
+//    if (S_ISLNK(buf.st_mode)) printf (" stat says link\n");
+//    if (S_ISREG(buf.st_mode)) printf (" stat says file\n");
+//
+//    x = lstat ("junklink", &buf);
+//    if (S_ISLNK(buf.st_mode)) printf ("lstat says link\n");
+//    if (S_ISREG(buf.st_mode)) printf ("lstat says file\n");
+}
+
 // Kopiowanie pliku z katalogu 1 do katalogu 2
-void CopyFileNormal(char *sourcePath, char *destinationPath) {
+void CopyFileNormal(char *sourcePath, char *destinationPath)
+{
     int copyFromFile = open(sourcePath, O_RDONLY);
-    int copyToFile = open(destinationPath, O_WRONLY | O_CREAT | O_TRUNC, PERM);
+    int copyToFile = open(destinationPath, O_WRONLY | O_CREAT | O_TRUNC, EPERM);
     int bufferSize = 4096;
     char *buffer = (char *) malloc(sizeof(char) * (bufferSize));
 
@@ -77,11 +103,13 @@ void CopyFileNormal(char *sourcePath, char *destinationPath) {
 
 }
 
-void WakeUp(int signal) {
+void WakeUp(int signal)
+{
     syslog(LOG_CONS, "WAKING UP DAEMON WITH SIGUSR1");
 }
 
-void GoToSleep() {
+void GoToSleep()
+{
     syslog(LOG_NOTICE, "GOING TO SLEEP\n");
 
     sleep(sleepTime);
@@ -90,7 +118,8 @@ void GoToSleep() {
 
 }
 
-void CheckArguments(int argc, char **argv) {
+void CheckArguments(int argc, char **argv)
+{
     switch (argc) // argv[0] to ścieżka do pliku .exe
     {
         case 3:
@@ -135,38 +164,48 @@ void CheckArguments(int argc, char **argv) {
     }
 
     // Sprawdzanie czy sciezka zrodlowa to katalog
-    if (isDirectory(argv[1])) {
+    if (isDirectory(argv[1]) == 0)
+    {
         printf("Sciezka zrodlowa nie jest katalogiem\n");
         exit(EXIT_FAILURE);
-    } else {
-        source = argv[1];
+    }
+    else {
+        source = realpath(argv[1], NULL);
+
+        //TODO: Nie wiem czy powinniśmy przechowywać wskaźnik do argumentów programu czy
+        //      zaalokować pamięć dla zmiennych
     }
 
     // Sprawdzanie czy sciezka docelowa to katalog
-    if (isDirectory(argv[2])) {
+    if (isDirectory(argv[2]) == 0)
+    {
         printf("Sciezka docelowa nie jest katalogiem\n");
         exit(EXIT_FAILURE);
-    } else {
-        dest = argv[2];
+    }
+    else {
+        dest = realpath(argv[2], NULL);
     }
 }
 
 void CheckPaths()
 {
     // Sprawdzanie czy sciezka zrodlowa to katalog
-    if (isDirectory(source)) {
-        syslog(LOG_ERR, "Source catalog does not exists or isn't a catalog\n");
+    if (isDirectory(source) == 0)
+    {
+        syslog(LOG_ERR, "Ścieżka źródłowa nie istnieje/nie jest katalogiem\n");
         exit(EXIT_FAILURE);
     }
 
     // Sprawdzanie czy sciezka docelowa to katalog
-    if (isDirectory(argv[2])) {
-        syslog(LOG_ERR, "Destination catalog does not exists or isn't a catalog\n");
+    if (isDirectory(dest) == 0)
+    {
+        syslog(LOG_ERR, "Ścieżka docelowa nie istnieje/nie jest katalogiem\n");
         exit(EXIT_FAILURE);
     }
 }
 
-void InitializeDaemon() {
+void InitializeDaemon()
+{
     /* Stworzenie nowego procesu */
     pid_t pid = fork();
     switch (pid) {
@@ -202,25 +241,108 @@ void InitializeDaemon() {
     close(STDIN_FILENO);
     close(STDOUT_FILENO);
     close(STDERR_FILENO);
-}
 
-void Synchronization(char *source, char *dest, bool allowRecursion) {
     /* przeadresuj deskryptory plików 0, 1, 2 na /dev/null */
     open("/dev/null", O_RDWR); /* stdin */
     dup(0); /* stdout */
     dup(0); /* stderror */
+    //TODO: @DevToxxy wytłumacz @FreeseBee do czego to służy
+}
 
-    /* Główny kod programu */
+void Synchronization()
+{
+    DIR *dir_dest, *dir_source;
+    struct dirent *entry_dest, *entry_source;
+
+    dir_source = opendir(source);
+    switch (errno) {
+        case EACCES:
+            syslog(LOG_ERR, "EACCES: %s",source);
+            break;
+        case EBADF  :
+            syslog(LOG_ERR, "EBADF: %s",source);
+            break;
+        case EMFILE :
+            syslog(LOG_ERR, "EMFILE: %s",source);
+            break;
+        case ENFILE   :
+            syslog(LOG_ERR, "ENFILE: %s",source);
+            break;
+        case ENOENT :
+            syslog(LOG_ERR, "ENOENT: %s",source);
+            break;
+        case ENOMEM :
+            syslog(LOG_ERR, "ENOMEM: %s",source);
+            break;
+        case ENOTDIR:
+            syslog(LOG_ERR, "ENOTDIR: %s",source);
+            break;
+    }
+
+    if (dir_source)
+    {
+        syslog(LOG_NOTICE, "LOOKING INTO: %s", (char*)dir_source);
+
+        while ((entry_source = readdir(dir_source)) != NULL)
+        {
+            //TODO: Naprawić sprawdzanie twardych dowiązań katalogu źródłowego
+//            if(strcmp(entry_source->d_name, ".\0") == 0 || strcmp(entry_source->d_name, "..\0") == 0)
+//                break;
+
+            dir_dest = opendir(dest);
+
+            switch (errno) {
+                case EACCES:
+                    syslog(LOG_ERR, "EACCES: %s",dest);
+                    break;
+                case EBADF  :
+                    syslog(LOG_ERR, "EBADF: %s",dest);
+                    break;
+                case EMFILE :
+                    syslog(LOG_ERR, "EMFILE: %s",dest);
+                    break;
+                case ENFILE   :
+                    syslog(LOG_ERR, "ENFILE: %s",dest);
+                    break;
+                case ENOENT :
+                    syslog(LOG_ERR, "ENOENT: %s",dest);
+                    break;
+                case ENOMEM :
+                    syslog(LOG_ERR, "ENOMEM: %s",dest);
+                    break;
+                case ENOTDIR:
+                    syslog(LOG_ERR, "ENOTDIR: %s",dest);
+                    break;
+            }
+
+            if(dir_dest)
+            {
+                syslog(LOG_NOTICE, "COMPARING WITH: %s", (char*)dir_dest);
+
+                while((entry_dest = readdir(dir_dest)) != NULL)
+                {
+                    //TODO: Naprawić sprawdzanie twardych dowiązań katalogi docelowego
+//                    if(strcmp(entry_dest->d_name, ".\0") == 0 || strcmp(entry_dest->d_name, "..\0") == 0)
+//                        break;
+
+                    syslog(LOG_NOTICE, "CHECKING: %s WITH %s", entry_source->d_name, entry_dest->d_name);
+                }
+
+                closedir(dir_dest);
+            }
+        }
+
+        closedir(dir_source);
+    }
 }
 
 int main(int argc, char **argv) {
-//    ZMIENNNE GLOBALNE:
-//    int sleepTime; // czas snu Daemona
-//    char* source, dest; // Ścieżki do plików/katalogów
-//    bool allowRecursion; // Tryb umożliwiający rekurencyjną synchronizację
 
 //    Sprawdzenie poprawności parametrów
-//    oraz inicjalizacjia zmiennych globalnych
+//    oraz inicjalizacja zmiennych globalnych:
+//    - int sleepTime; // czas snu Daemona
+//    - char* source, dest; // Ścieżki do plików/katalogów źródłowego i docelowego
+//    - bool allowRecursion; // Tryb umożliwiający rekurencyjną synchronizację
     CheckArguments(argc, argv);
 
     InitializeDaemon();
@@ -239,7 +361,7 @@ int main(int argc, char **argv) {
 //    Sprawdź czy po pobudce katalogi istnieją
     CheckPaths();
 
-    //Synchronization(source, dest, allowRecursion);
+    Synchronization();
 
     syslog(LOG_NOTICE, "DAEMON EXORCUMCISED\n");
     closelog();
