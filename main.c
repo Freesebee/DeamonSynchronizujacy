@@ -77,13 +77,11 @@ void CopyFileNormal(char *sourcePath, char *destinationPath) {
 }
 
 // /bin/kill -s SIGUSR1 PID aby obudzić
-void WakeUpDaemon(int signal) {
+void WakeUp(int signal) {
     syslog(LOG_CONS, "WAKING UP DAEMON WITH SIGUSR1");
 }
 
-void Sleeping() {
-    signal(SIGUSR1, WakeUpDaemon);
-
+void GoToSleep() {
     syslog(LOG_NOTICE, "GOING TO SLEEP\n");
 
     sleep(sleepTime);
@@ -106,10 +104,12 @@ void CheckArguments(int argc, char **argv) {
             if (argv[3] == "-R") {
                 allowRecursion = true;
                 sleepTime = DEFAULT_SLEEP_TIME;
-            } else if (sleepTime == 0) {
+            }
+            else if (sleepTime == 0) {
                 printf("Czas snu musi byc dodatnia liczba calkowita\n");
                 exit(EXIT_FAILURE);
-            } else {
+            }
+            else {
                 allowRecursion = false;
             }
             break;
@@ -204,16 +204,21 @@ int main(int argc, char **argv) {
 //    char* source, dest; // Ścieżki do plików/katalogów
 //    bool allowRecursion; // Tryb umożliwiający rekurencyjną synchronizację
 
+//    Sprawdzenie poprawności parametrów
+//    oraz inicjalizacjia zmiennych globalnych
     CheckArguments(argc, argv);
 
     InitializeDaemon();
 
-    /* Otworzenie pliku z logami */
-    /* cat /var/log/syslog | grep -i SYNCHRONIZER */
+//    Umożliwienie budzenia daemona sygnałem SIGUSR1
+    signal(SIGUSR1, WakeUp);
+
+//    Otworzenie pliku z logami
+//    cat /var/log/syslog | grep -i SYNCHRONIZER
     openlog("SYNCHRONIZER", LOG_PID, LOG_DAEMON);
     syslog(LOG_NOTICE, "DAEMON SUMMONED\n");
 
-    Sleeping();
+    GoToSleep();
 
     //TODO: Sprawdź czy po pobudce katalogi istnieją
 
