@@ -45,6 +45,7 @@ int isRegularFile(const char *path) {
         return 0;
     return S_ISREG(statbuffer.st_mode); //0 jesli NIE jest katalogiem
 }
+
 // Kopiowanie pliku z katalogu 1 do katalogu 2
 void CopyFileNormal(char *sourcePath, char *destinationPath) {
     int copyFromFile = open(sourcePath, O_RDONLY);
@@ -76,7 +77,6 @@ void CopyFileNormal(char *sourcePath, char *destinationPath) {
 
 }
 
-// /bin/kill -s SIGUSR1 PID aby obudzić
 void WakeUp(int signal) {
     syslog(LOG_CONS, "WAKING UP DAEMON WITH SIGUSR1");
 }
@@ -151,6 +151,21 @@ void CheckArguments(int argc, char **argv) {
     }
 }
 
+void CheckPaths()
+{
+    // Sprawdzanie czy sciezka zrodlowa to katalog
+    if (isDirectory(source)) {
+        syslog(LOG_ERR, "Source catalog does not exists or isn't a catalog\n");
+        exit(EXIT_FAILURE);
+    }
+
+    // Sprawdzanie czy sciezka docelowa to katalog
+    if (isDirectory(argv[2])) {
+        syslog(LOG_ERR, "Destination catalog does not exists or isn't a catalog\n");
+        exit(EXIT_FAILURE);
+    }
+}
+
 void InitializeDaemon() {
     /* Stworzenie nowego procesu */
     pid_t pid = fork();
@@ -211,6 +226,7 @@ int main(int argc, char **argv) {
     InitializeDaemon();
 
 //    Umożliwienie budzenia daemona sygnałem SIGUSR1
+//    /bin/kill -s SIGUSR1 PID aby obudzić
     signal(SIGUSR1, WakeUp);
 
 //    Otworzenie pliku z logami
@@ -220,7 +236,8 @@ int main(int argc, char **argv) {
 
     GoToSleep();
 
-    //TODO: Sprawdź czy po pobudce katalogi istnieją
+//    Sprawdź czy po pobudce katalogi istnieją
+    CheckPaths();
 
     //Synchronization(source, dest, allowRecursion);
 
