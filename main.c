@@ -146,7 +146,8 @@ int CopyFileMmap(char *sourcePath, char *destinationPath)
         syslog(LOG_ERR, " Error reading file: %s or writing to file: %s",sourcePath,destinationPath);
         return(-1);
     }
-
+    close(copyFromFile);
+    close(copyToFile);
 
 }
 
