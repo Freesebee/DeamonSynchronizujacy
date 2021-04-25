@@ -70,7 +70,11 @@ int isSymbolicLink(const char *path)
 //    if (S_ISLNK(buf.st_mode)) printf ("lstat says link\n");
 //    if (S_ISREG(buf.st_mode)) printf ("lstat says file\n");
 }
+   // TODO: funkcje porownujaca pliki
+    void CompareFiles()
+   {
 
+   }
 // Kopiowanie pliku z katalogu 1 do katalogu 2
 void CopyFileNormal(char *sourcePath, char *destinationPath)
 {
@@ -91,12 +95,13 @@ void CopyFileNormal(char *sourcePath, char *destinationPath)
         if (bytesRead <= 0) {
             break;
         }
-        ssize_t bytesWritten = write(copyToFile, buffer, bufferSize);
+        ssize_t bytesWritten = write(copyToFile, buffer, bytesRead);
         if (bytesWritten != bytesRead) {
-            syslog(LOG_ERR, "Error reading file: %s or writing to file: %s",sourcePath,destinationPath);
+            syslog(LOG_ERR, " Error reading file: %s or writing to file: %s",sourcePath,destinationPath);
             return(-1);
         }
     }
+
     close(copyFromFile);
     close(copyToFile);
     free(buffer);
@@ -285,10 +290,8 @@ void Synchronization()
 
         while ((entry_source = readdir(dir_source)) != NULL)
         {
-            //TODO: Naprawić sprawdzanie twardych dowiązań katalogu źródłowego
             if(strcmp(entry_source->d_name, ".") == 0 || strcmp(entry_source->d_name, "..") == 0)
                 continue;
-
             dir_dest = opendir(dest);
 
             switch (errno) {
@@ -321,9 +324,9 @@ void Synchronization()
 
                 while((entry_dest = readdir(dir_dest)) != NULL)
                 {
-                    //TODO: Naprawić sprawdzanie twardych dowiązań katalogi docelowego
                     if(strcmp(entry_dest->d_name, ".") == 0 || strcmp(entry_dest->d_name, "..") == 0)
                         continue;
+                    //TODO: porownanie plikow funkcja compareFiles
 
                     syslog(LOG_NOTICE, "CHECKING: %s WITH %s", entry_source->d_name, entry_dest->d_name);
                 }
@@ -335,7 +338,6 @@ void Synchronization()
         closedir(dir_source);
     }
 }
-
 int main(int argc, char **argv) {
 
 //    Sprawdzenie poprawności parametrów
@@ -358,11 +360,12 @@ int main(int argc, char **argv) {
 
     GoToSleep();
 
+    //TODO: Sprawdź czy po pobudce katalogi istnieją
+    //Synchronization(source, dest, allowRecursion);
 //    Sprawdź czy po pobudce katalogi istnieją
     CheckPaths();
 
     Synchronization();
-
     syslog(LOG_NOTICE, "DAEMON EXORCUMCISED\n");
     closelog();
 
