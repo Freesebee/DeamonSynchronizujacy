@@ -286,7 +286,7 @@ void Synchronization()
         while ((entry_source = readdir(dir_source)) != NULL)
         {
             //TODO: Naprawić sprawdzanie twardych dowiązań katalogu źródłowego
-            if(strcmp(entry_source->d_name, ".\0") == 0 || strcmp(entry_source->d_name, "..\0") == 0)
+            if(strcmp(entry_source->d_name, ".") == 0 || strcmp(entry_source->d_name, "..") == 0)
                 continue;
 
             dir_dest = opendir(dest);
@@ -322,7 +322,7 @@ void Synchronization()
                 while((entry_dest = readdir(dir_dest)) != NULL)
                 {
                     //TODO: Naprawić sprawdzanie twardych dowiązań katalogi docelowego
-                    if(strcmp(entry_dest->d_name, ".0") == 0 || strcmp(entry_dest->d_name, "..") == 0)
+                    if(strcmp(entry_dest->d_name, ".") == 0 || strcmp(entry_dest->d_name, "..") == 0)
                         continue;
 
                     syslog(LOG_NOTICE, "CHECKING: %s WITH %s", entry_source->d_name, entry_dest->d_name);
