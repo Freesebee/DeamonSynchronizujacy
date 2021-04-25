@@ -49,6 +49,7 @@ int isRegularFile(const char *path) {
     return S_ISREG(statbuffer.st_mode); //0 jesli NIE jest katalogiem
 }
 
+
 // Sprawdza czy plik o podanej ścieżce jest dowiązaniem symbolicznym
 int isSymbolicLink(const char *path)
 {
@@ -70,13 +71,34 @@ int isSymbolicLink(const char *path)
 //    if (S_ISLNK(buf.st_mode)) printf ("lstat says link\n");
 //    if (S_ISREG(buf.st_mode)) printf ("lstat says file\n");
 }
-   // TODO: funkcje porownujaca pliki
-    void CompareFiles()
-   {
+char *AddFileNameToDirPath(char* DirPath,char* FileName)
+{
+    int bufferSize = 4096;
+    char *finalPath = malloc(sizeof(char) * (bufferSize));
+    strcpy(finalPath,DirPath);
+    strcat(finalPath, "/");
+    strcat(finalPath, FileName);
+    return (char*)finalPath;
+}
 
+bool CompareFiles(char *sourcePath, char *destinationPath)
+{
+    if(destinationPath == sourcePath)
+    {
+        return true;
+    }
+    else return false;
    }
+
+time_t ModificationTime(char *path)
+{
+    struct stat pathStat;
+    stat(path,&pathStat);
+    time_t time = pathStat.st_ctime
+    return time;
+}
 // Kopiowanie pliku z katalogu 1 do katalogu 2
-void CopyFileNormal(char *sourcePath, char *destinationPath)
+int CopyFileNormal(char *sourcePath, char *destinationPath)
 {
     int copyFromFile = open(sourcePath, O_RDONLY);
     int copyToFile = open(destinationPath, O_WRONLY | O_CREAT | O_TRUNC, EPERM);
@@ -258,7 +280,7 @@ void Synchronization()
 {
     DIR *dir_dest, *dir_source;
     struct dirent *entry_dest, *entry_source;
-
+    char *sourcePath, *destPath;
     dir_source = opendir(source);
     switch (errno) {
         case EACCES:
@@ -327,7 +349,22 @@ void Synchronization()
                     if(strcmp(entry_dest->d_name, ".") == 0 || strcmp(entry_dest->d_name, "..") == 0)
                         continue;
                     //TODO: porownanie plikow funkcja compareFiles
+                    sourcePath = AddFileNameToDirPath(source,entry_source->d_name);
+                    destPath = AddFileNameToDirPath(dest, entry_dest->d_name);
 
+                    if(!CompareFiles(sourcePath,destPath) ||
+                    ModificationTime(sourcePath) > ModificationTime(destPath))
+                    {
+                        //skopiuj plik z  source do dest
+
+                        CopyFileNormal(sourcePath,destPath);
+                    }
+                    else
+                    {
+
+                        //jesli sa takie same przejdz do nast pliku sourceDir
+                        break;
+                    }
                     syslog(LOG_NOTICE, "CHECKING: %s WITH %s", entry_source->d_name, entry_dest->d_name);
                 }
 
