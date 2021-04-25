@@ -14,7 +14,7 @@
 #include <signal.h>
 #include <limits.h>
 #include <string.h>
-
+#include <sys/mman.h>
 #define DEFAULT_SLEEP_TIME 300 // domyślny czas snu (5 min)
 
 int sleepTime; // czas snu Daemona
@@ -73,7 +73,7 @@ int isSymbolicLink(const char *path)
 }
 char *AddFileNameToDirPath(char* DirPath,char* FileName)
 {
-    int bufferSize = 4096;
+    int bufferSize = 2048;
     char *finalPath = malloc(sizeof(char) * (bufferSize));
     strcpy(finalPath,DirPath);
     strcat(finalPath, "/");
@@ -94,7 +94,7 @@ time_t ModificationTime(char *path)
 {
     struct stat pathStat;
     stat(path,&pathStat);
-    time_t time = pathStat.st_ctime
+    time_t time = pathStat.st_ctime;
     return time;
 }
 // Kopiowanie pliku z katalogu 1 do katalogu 2
@@ -102,7 +102,7 @@ int CopyFileNormal(char *sourcePath, char *destinationPath)
 {
     int copyFromFile = open(sourcePath, O_RDONLY);
     int copyToFile = open(destinationPath, O_WRONLY | O_CREAT | O_TRUNC, EPERM);
-    int bufferSize = 4096;
+    int bufferSize = 2048;
     char *buffer = (char *) malloc(sizeof(char) * (bufferSize));
 
     if (buffer == NULL) {
@@ -127,6 +127,26 @@ int CopyFileNormal(char *sourcePath, char *destinationPath)
     close(copyFromFile);
     close(copyToFile);
     free(buffer);
+
+}
+int CopyFileMmap(char *sourcePath, char *destinationPath)
+{
+    int copyFromFile = open(sourcePath, O_RDONLY);
+    int copyToFile = open(destinationPath, O_WRONLY | O_CREAT | O_TRUNC, EPERM);
+    struct stat pathStat;
+    stat(sourcePath,&pathStat);
+    char *mappedFile = mmap(NULL,pathStat.st_size, PROT_READ, MAP_SHARED,copyFromFile,0);
+    if (mappedFile <= 0)
+    {
+        return(-1);
+    }
+    ssize_t bytesWritten = write(copyToFile, mappedFile, pathStat.st_size);
+    if (bytesWritten != pathStat.st_size)
+    {
+        syslog(LOG_ERR, " Error reading file: %s or writing to file: %s",sourcePath,destinationPath);
+        return(-1);
+    }
+
 
 }
 
@@ -399,10 +419,14 @@ int main(int argc, char **argv) {
 
     //TODO: Sprawdź czy po pobudce katalogi istnieją
     //Synchronization(source, dest, allowRecursion);
-//    Sprawdź czy po pobudce katalogi istnieją
+    //Sprawdź czy po pobudce katalogi istnieją
     CheckPaths();
 
     Synchronization();
+    //sprawdzanie kopiowania (DEBUG)
+//    char *src = "/home/student/przyklad1";
+//    char *dest = "/home/student/Muzyka/przykladcopied";
+//    CopyFileMmap(src,dest);
     syslog(LOG_NOTICE, "DAEMON EXORCUMCISED\n");
     closelog();
 
