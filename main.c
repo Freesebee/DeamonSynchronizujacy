@@ -16,6 +16,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #define DEFAULT_SLEEP_TIME 300 // domyślny czas snu (5 min)
+#define BUFFER_SIZE 2048
 
 int sleepTime; // czas snu Daemona
 char *source; // ścieżka do katalogu źródłowego
@@ -71,14 +72,13 @@ int isSymbolicLink(const char *path)
 //    if (S_ISLNK(buf.st_mode)) printf ("lstat says link\n");
 //    if (S_ISREG(buf.st_mode)) printf ("lstat says file\n");
 }
-char *AddFileNameToDirPath(char* DirPath,char* FileName)
+char *AddFileNameToDirPath(char *DirPath,char *FileName)
 {
-    int bufferSize = 2048;
-    char *finalPath = malloc(sizeof(char) * (bufferSize));
+    char *finalPath = malloc(sizeof(char) * (BUFFER_SIZE));
     strcpy(finalPath,DirPath);
     strcat(finalPath, "/");
     strcat(finalPath, FileName);
-    return (char*)finalPath;
+    return finalPath;
 }
 
 bool CompareFiles(char *sourcePath, char *destinationPath)
@@ -102,8 +102,7 @@ int CopyFileNormal(char *sourcePath, char *destinationPath)
 {
     int copyFromFile = open(sourcePath, O_RDONLY);
     int copyToFile = open(destinationPath, O_WRONLY | O_CREAT | O_TRUNC, EPERM);
-    int bufferSize = 2048;
-    char *buffer = (char *) malloc(sizeof(char) * (bufferSize));
+    char *buffer = malloc(sizeof(char) * BUFFER_SIZE);
 
     if (buffer == NULL) {
         syslog(LOG_ERR, "Memory allocation error");
@@ -113,7 +112,7 @@ int CopyFileNormal(char *sourcePath, char *destinationPath)
     }
 
     for (;;) {
-        ssize_t bytesRead = read(copyFromFile, buffer, bufferSize);
+        ssize_t bytesRead = read(copyFromFile, buffer, BUFFER_SIZE);
         if (bytesRead <= 0) {
             break;
         }
@@ -387,6 +386,8 @@ void Synchronization()
                         break;
                     }
                     syslog(LOG_NOTICE, "CHECKING: %s WITH %s", entry_source->d_name, entry_dest->d_name);
+                    free(sourcePath);
+                    free(destPath);
                 }
 
                 closedir(dir_dest);
@@ -395,6 +396,7 @@ void Synchronization()
 
         closedir(dir_source);
     }
+
 }
 int main(int argc, char **argv) {
 
