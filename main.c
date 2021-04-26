@@ -74,7 +74,7 @@ int isSymbolicLink(const char *path)
 }
 char *AddFileNameToDirPath(char *DirPath,char *FileName)
 {
-    char *finalPath = malloc(sizeof(char) * (bufferSize));
+    char *finalPath = malloc(sizeof(char) * (BUFFER_SIZE));
     strcpy(finalPath,DirPath);
     strcat(finalPath, "/");
     strcat(finalPath, FileName);
@@ -102,8 +102,7 @@ int CopyFileNormal(char *sourcePath, char *destinationPath)
 {
     int copyFromFile = open(sourcePath, O_RDONLY);
     int copyToFile = open(destinationPath, O_WRONLY | O_CREAT | O_TRUNC, EPERM);
-    int bufferSize = 2048;
-    char *buffer = malloc(sizeof(char) * bufferSize);
+    char *buffer = malloc(sizeof(char) * BUFFER_SIZE);
 
     if (buffer == NULL) {
         syslog(LOG_ERR, "Memory allocation error");
@@ -113,7 +112,7 @@ int CopyFileNormal(char *sourcePath, char *destinationPath)
     }
 
     for (;;) {
-        ssize_t bytesRead = read(copyFromFile, buffer, bufferSize);
+        ssize_t bytesRead = read(copyFromFile, buffer, BUFFER_SIZE);
         if (bytesRead <= 0) {
             break;
         }
@@ -396,6 +395,8 @@ void Synchronization()
                         break;
                     }
                     syslog(LOG_NOTICE, "CHECKING: %s WITH %s", entry_source->d_name, entry_dest->d_name);
+                    free(sourcePath);
+                    free(destPath);
                 }
 
                 closedir(dir_dest);
@@ -404,8 +405,7 @@ void Synchronization()
 
         closedir(dir_source);
     }
-    free(sourcePath);
-    free(destPath);
+
 }
 int main(int argc, char **argv) {
 
