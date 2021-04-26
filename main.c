@@ -16,13 +16,13 @@
 #include <string.h>
 #include <sys/mman.h>
 #define DEFAULT_SLEEP_TIME 300 // domyślny czas snu (5 min)
-#define BUFFER_SIZE 2048
+#define BUFFER_SIZE 2048 //2 KB
 
 int sleepTime; // czas snu Daemona
 char *source; // ścieżka do katalogu źródłowego
 char *dest; // ścieżka do katalogu docelowego
 bool allowRecursion; // Tryb umożliwiający rekurencyjną synchronizację
-
+int minSize = 1048576; //1 MB
 // otwiera logi, pierwszy argument jest dodawany na poczatek kazdego logu
 // drugi to specjalne opcje, mozna wrzucic kilka za pomoca |
 // trzeci wskazuje jaki typ programu loguje wiadomosci
@@ -74,7 +74,7 @@ int isSymbolicLink(const char *path)
 }
 char *AddFileNameToDirPath(char *DirPath,char *FileName)
 {
-    char *finalPath = malloc(sizeof(char) * (BUFFER_SIZE));
+    char *finalPath = malloc(sizeof(char) * (bufferSize));
     strcpy(finalPath,DirPath);
     strcat(finalPath, "/");
     strcat(finalPath, FileName);
@@ -102,7 +102,8 @@ int CopyFileNormal(char *sourcePath, char *destinationPath)
 {
     int copyFromFile = open(sourcePath, O_RDONLY);
     int copyToFile = open(destinationPath, O_WRONLY | O_CREAT | O_TRUNC, EPERM);
-    char *buffer = malloc(sizeof(char) * BUFFER_SIZE);
+    int bufferSize = 2048;
+    char *buffer = malloc(sizeof(char) * bufferSize);
 
     if (buffer == NULL) {
         syslog(LOG_ERR, "Memory allocation error");
@@ -112,7 +113,7 @@ int CopyFileNormal(char *sourcePath, char *destinationPath)
     }
 
     for (;;) {
-        ssize_t bytesRead = read(copyFromFile, buffer, BUFFER_SIZE);
+        ssize_t bytesRead = read(copyFromFile, buffer, bufferSize);
         if (bytesRead <= 0) {
             break;
         }
@@ -372,12 +373,21 @@ void Synchronization()
                     sourcePath = AddFileNameToDirPath(source,entry_source->d_name);
                     destPath = AddFileNameToDirPath(dest, entry_dest->d_name);
 
+                    struct stat srcStat;
+                    stat(sourcePath,&srcStat);
+
                     if(!CompareFiles(sourcePath,destPath) ||
                     ModificationTime(sourcePath) > ModificationTime(destPath))
                     {
                         //skopiuj plik z  source do dest
-
-                        CopyFileNormal(sourcePath,destPath);
+                        if(srcStat.st_size < minSize)
+                        {
+                            CopyFileNormal(sourcePath,destPath);
+                        }
+                        else
+                        {
+                            CopyFileMmap(sourcePath,destPath);
+                        }
                     }
                     else
                     {
@@ -386,8 +396,6 @@ void Synchronization()
                         break;
                     }
                     syslog(LOG_NOTICE, "CHECKING: %s WITH %s", entry_source->d_name, entry_dest->d_name);
-                    free(sourcePath);
-                    free(destPath);
                 }
 
                 closedir(dir_dest);
@@ -396,7 +404,8 @@ void Synchronization()
 
         closedir(dir_source);
     }
-
+    free(sourcePath);
+    free(destPath);
 }
 int main(int argc, char **argv) {
 
