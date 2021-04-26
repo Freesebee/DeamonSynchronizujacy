@@ -15,14 +15,23 @@
 #include <limits.h>
 #include <string.h>
 #include <sys/mman.h>
-#define DEFAULT_SLEEP_TIME 300 // domyślny czas snu (5 min)
-#define BUFFER_SIZE 2048 //2 KB
 
-int sleepTime; // czas snu Daemona
+#define DEFAULT_FILE_SIZE_THRESHOLD 1048576 // domyślny próg rozmiaru plików do kopiowania
+#define BUFFER_SIZE 2048 //2 KB
+#define DEFAULT_SLEEP_TIME 300 // domyślny czas snu (5 min)
+
 char *source; // ścieżka do katalogu źródłowego
 char *dest; // ścieżka do katalogu docelowego
-bool allowRecursion; // Tryb umożliwiający rekurencyjną synchronizację
-int minSize = 1048576; //1 MB
+
+bool allowRecursion; //[Parametr: -R]
+// Tryb umożliwiający rekurencyjną synchronizację
+
+int fileSizeThreshold; //[Parametr: -fs]
+// Próg dzielący pliki małe od dużych przy ich kopiowaniu
+
+int sleepTime; //[Parametr: -st]
+// czas snu Daemona
+
 // otwiera logi, pierwszy argument jest dodawany na poczatek kazdego logu
 // drugi to specjalne opcje, mozna wrzucic kilka za pomoca |
 // trzeci wskazuje jaki typ programu loguje wiadomosci
@@ -50,7 +59,6 @@ int isRegularFile(const char *path) {
     return S_ISREG(statbuffer.st_mode); //0 jesli NIE jest katalogiem
 }
 
-
 // Sprawdza czy plik o podanej ścieżce jest dowiązaniem symbolicznym
 int isSymbolicLink(const char *path)
 {
@@ -72,7 +80,8 @@ int isSymbolicLink(const char *path)
 //    if (S_ISLNK(buf.st_mode)) printf ("lstat says link\n");
 //    if (S_ISREG(buf.st_mode)) printf ("lstat says file\n");
 }
-char *AddFileNameToDirPath(char *DirPath,char *FileName)
+
+char *AddFileNameToDirPath(char* DirPath,char* FileName)
 {
     char *finalPath = malloc(sizeof(char) * (BUFFER_SIZE));
     strcpy(finalPath,DirPath);
@@ -97,6 +106,7 @@ time_t ModificationTime(char *path)
     time_t time = pathStat.st_ctime;
     return time;
 }
+
 // Kopiowanie pliku z katalogu 1 do katalogu 2
 int CopyFileNormal(char *sourcePath, char *destinationPath)
 {
@@ -128,6 +138,7 @@ int CopyFileNormal(char *sourcePath, char *destinationPath)
     free(buffer);
 
 }
+
 int CopyFileMmap(char *sourcePath, char *destinationPath)
 {
     int copyFromFile = open(sourcePath, O_RDONLY);
@@ -167,47 +178,10 @@ void GoToSleep()
 
 void CheckArguments(int argc, char **argv)
 {
-    switch (argc) // argv[0] to ścieżka do pliku .exe
+    if(argc < 2 || argc > 8)
     {
-        case 3:
-            sleepTime = DEFAULT_SLEEP_TIME;
-            allowRecursion = false;
-            break;
-
-        case 4:
-            sleepTime = atoi(argv[3]);
-
-            if (argv[3] == "-R") {
-                allowRecursion = true;
-                sleepTime = DEFAULT_SLEEP_TIME;
-            }
-            else if (sleepTime == 0) {
-                printf("Czas snu musi byc dodatnia liczba calkowita\n");
-                exit(EXIT_FAILURE);
-            }
-            else {
-                allowRecursion = false;
-            }
-            break;
-
-        case 5:
-            printf("Niezaimplementowane...\n");
-            exit(EXIT_FAILURE);
-
-            if (argv[3] == "-R") {
-                allowRecursion = true;
-            } else if (atoi(argv[3])) {
-                printf("Czas snu musi byc liczba calkowita\n");
-                exit(EXIT_FAILURE);
-            } else {
-                allowRecursion = false;
-            }
-
-            break;
-
-        default:
-            printf("Program przyjmuje 2, 3 lub 4 argumenty\n");
-            exit(EXIT_FAILURE);
+        printf("Niepoprawna liczba argumentow\nSyntax: *source *dest [-R] [-st sleepTime] [-fs fileSizeThreshold]\n");
+        exit(EXIT_FAILURE);
     }
 
     // Sprawdzanie czy sciezka zrodlowa to katalog
@@ -231,6 +205,66 @@ void CheckArguments(int argc, char **argv)
     }
     else {
         dest = realpath(argv[2], NULL);
+    }
+
+    //Domyślna inicjalizacja zmiennych globalnych
+    sleepTime = DEFAULT_SLEEP_TIME;
+    fileSizeThreshold = DEFAULT_FILE_SIZE_THRESHOLD;
+    allowRecursion = false;
+
+    int i;
+    bool fs_set = false, st_set = false, R_set = false;
+
+    for(i = 3; i < argc; i++)
+    {
+        if (strcmp(argv[i], "-R") == 0)
+        {
+            if(R_set)
+            {
+                printf("Parametr allowRecursion zosal juz zainicjalizowany\n");
+                exit(EXIT_FAILURE);
+            }
+
+            allowRecursion = true;
+            R_set = true;
+        }
+        else if (strcmp(argv[i], "-fs") == 0)
+        {
+            if(fs_set)
+            {
+                printf("Parametr fileSizeThreshold zosal juz zainicjalizowany\n");
+                exit(EXIT_FAILURE);
+            }
+
+            if(++i > argc-1 || (fileSizeThreshold = atoi(argv[i])) <= 0)
+            {
+                printf("Parametr fileSizeThreshold musi byc liczba dodatnia\n");
+                exit(EXIT_FAILURE);
+            }
+
+            fs_set = true;
+        }
+        else if (strcmp(argv[i], "-st") == 0)
+        {
+            if(st_set)
+            {
+                printf("Parametr sleepTime zosal juz zainicjalizowany\n");
+                exit(EXIT_FAILURE);
+            }
+
+            if (++i > argc-1 || (sleepTime = atoi(argv[i])) <= 0)
+            {
+                printf("Parametr sleepTime musi byc liczba dodatnia\n");
+                exit(EXIT_FAILURE);
+            }
+
+            st_set = true;
+        }
+        else
+        {
+            printf("Blad %d argumentu\nSyntax: *source *dest [-R] [-st sleepTime] [-fs fileSizeThreshold]\n",i);
+            exit(EXIT_FAILURE);
+        }
     }
 }
 
@@ -379,7 +413,7 @@ void Synchronization()
                     ModificationTime(sourcePath) > ModificationTime(destPath))
                     {
                         //skopiuj plik z  source do dest
-                        if(srcStat.st_size < minSize)
+                        if(srcStat.st_size < fileSizeThreshold)
                         {
                             CopyFileNormal(sourcePath,destPath);
                         }
@@ -405,8 +439,8 @@ void Synchronization()
 
         closedir(dir_source);
     }
-
 }
+
 int main(int argc, char **argv) {
 
 //    Sprawdzenie poprawności parametrów
@@ -429,8 +463,6 @@ int main(int argc, char **argv) {
 
     GoToSleep();
 
-    //TODO: Sprawdź czy po pobudce katalogi istnieją
-    //Synchronization(source, dest, allowRecursion);
     //Sprawdź czy po pobudce katalogi istnieją
     CheckPaths();
 
@@ -444,4 +476,3 @@ int main(int argc, char **argv) {
 
     exit(EXIT_SUCCESS);
 }
-
