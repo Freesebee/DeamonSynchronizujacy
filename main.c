@@ -107,6 +107,13 @@ time_t ModificationTime(char *path)
     return time;
 }
 
+off_t FileSize(char *path) //jesli nie bedzie dzialalo to zmienic typ na _off_t
+{
+    struct stat pathStat;
+    stat(path,&pathStat);
+    off_t size = pathStat.st_size;
+    return size;
+}
 // Kopiowanie pliku z katalogu 1 do katalogu 2
 int CopyFileNormal(char *sourcePath, char *destinationPath)
 {
@@ -132,7 +139,7 @@ int CopyFileNormal(char *sourcePath, char *destinationPath)
             return(-1);
         }
     }
-
+    syslog(LOG_NOTICE, "Copying file %s and writing to file %s was a success",sourcePath,destinationPath);
     close(copyFromFile);
     close(copyToFile);
     free(buffer);
@@ -156,6 +163,7 @@ int CopyFileMmap(char *sourcePath, char *destinationPath)
         syslog(LOG_ERR, " Error reading file: %s or writing to file: %s",sourcePath,destinationPath);
         return(-1);
     }
+    syslog(LOG_NOTICE, "Copying file %s and writing to file %s was a success",sourcePath,destinationPath);
     close(copyFromFile);
     close(copyToFile);
 
@@ -248,7 +256,7 @@ void CheckArguments(int argc, char **argv)
         {
             if(st_set)
             {
-                printf("Parametr sleepTime zosal juz zainicjalizowany\n");
+                printf("Parametr sleepTime zostal juz zainicjalizowany\n");
                 exit(EXIT_FAILURE);
             }
 
@@ -402,18 +410,16 @@ void Synchronization()
                 {
                     if(strcmp(entry_dest->d_name, ".") == 0 || strcmp(entry_dest->d_name, "..") == 0)
                         continue;
-                    //TODO: porownanie plikow funkcja compareFiles
                     sourcePath = AddFileNameToDirPath(source,entry_source->d_name);
                     destPath = AddFileNameToDirPath(dest, entry_dest->d_name);
 
-                    struct stat srcStat;
-                    stat(sourcePath,&srcStat);
+
 
                     if(!CompareFiles(sourcePath,destPath) ||
                     ModificationTime(sourcePath) > ModificationTime(destPath))
                     {
                         //skopiuj plik z  source do dest
-                        if(srcStat.st_size < fileSizeThreshold)
+                        if(FileSize(sourcePath)< fileSizeThreshold)
                         {
                             CopyFileNormal(sourcePath,destPath);
                         }
@@ -466,11 +472,11 @@ int main(int argc, char **argv) {
     //Sprawdź czy po pobudce katalogi istnieją
     CheckPaths();
 
-    Synchronization();
+    //Synchronization();
     //sprawdzanie kopiowania (DEBUG)
-//    char *src = "/home/student/przyklad1";
-//    char *dest = "/home/student/Muzyka/przykladcopied";
-//    CopyFileMmap(src,dest);
+    char *src = "/home/student/przyklad1";
+    char *dest = "/home/student/Muzyka/przykladcopied";
+    CopyFileMmap(src,dest);
     syslog(LOG_NOTICE, "DAEMON EXORCUMCISED\n");
     closelog();
 
