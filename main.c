@@ -59,28 +59,6 @@ int isRegularFile(const char *path) {
     return S_ISREG(statbuffer.st_mode); //0 jesli NIE jest plikiem
 }
 
-// Sprawdza czy plik o podanej ścieżce jest dowiązaniem symbolicznym
-int isSymbolicLink(const char *path)
-{
-    struct stat buf;
-    int x = lstat (path, &buf);
-
-    if (S_ISLNK(buf.st_mode))
-        return 1; // Jest dowiązaniem symbolicznym
-    else
-        return 0;
-
-/* TODO: Gdy zadziała wywalić poniższy kod */
-
-//    x = stat ("junklink", &buf);
-//    if (S_ISLNK(buf.st_mode)) printf (" stat says link\n");
-//    if (S_ISREG(buf.st_mode)) printf (" stat says file\n");
-//
-//    x = lstat ("junklink", &buf);
-//    if (S_ISLNK(buf.st_mode)) printf ("lstat says link\n");
-//    if (S_ISREG(buf.st_mode)) printf ("lstat says file\n");
-}
-
 char *AddFileNameToDirPath(char* DirPath,char* FileName)
 {
     char *finalPath = malloc(sizeof(char) * (BUFFER_SIZE));
@@ -149,17 +127,7 @@ int CopyFileNormal(char *sourcePath, char *destinationPath)
 // Usuwanie pliku / katalogu
 void DeleteEntry(const char *relativePath)
 {
-    if (isRegularFile(relativePath))
-    {
-        if (unlink(relativePath))
-        {
-            syslog(LOG_ERR, "Error while deleting file: %s\nerrno = %d", relativePath, errno);
-            exit(EXIT_FAILURE);
-        }
-
-        syslog(LOG_NOTICE, "DELETED FILE: %s\n", relativePath);
-    }
-    else
+    if (isDirectory(relativePath))
     {
         if (unlinkat(AT_FDCWD, relativePath, AT_REMOVEDIR))
         {
@@ -198,6 +166,16 @@ void DeleteEntry(const char *relativePath)
         }
 
         syslog(LOG_NOTICE, "DELETED DIRECTORY: %s\n", relativePath);
+    }
+    else
+    {
+        if (unlink(relativePath))
+        {
+            syslog(LOG_ERR, "Error while deleting file: %s\nerrno = %d", relativePath, errno);
+            exit(EXIT_FAILURE);
+        }
+
+        syslog(LOG_NOTICE, "DELETED FILE: %s\n", relativePath);
     }
 }
 
@@ -239,7 +217,7 @@ void GoToSleep()
 
 }
 
-void CheckArguments(int argc, char **argv)
+void InitializeParameters(int argc, char **argv)
 {
     if(argc < 2 || argc > 8)
     {
@@ -398,107 +376,68 @@ void Synchronization()
     DIR *dir_dest, *dir_source;
     struct dirent *entry_dest, *entry_source;
     char *sourcePath, *destPath;
+
     dir_source = opendir(source);
-    switch (errno) {
-        case EACCES:
-            syslog(LOG_ERR, "EACCES: %s",source);
-            break;
-        case EBADF  :
-            syslog(LOG_ERR, "EBADF: %s",source);
-            break;
-        case EMFILE :
-            syslog(LOG_ERR, "EMFILE: %s",source);
-            break;
-        case ENFILE   :
-            syslog(LOG_ERR, "ENFILE: %s",source);
-            break;
-        case ENOENT :
-            syslog(LOG_ERR, "ENOENT: %s",source);
-            break;
-        case ENOMEM :
-            syslog(LOG_ERR, "ENOMEM: %s",source);
-            break;
-        case ENOTDIR:
-            syslog(LOG_ERR, "ENOTDIR: %s",source);
-            break;
+
+    if(dir_source == NULL)
+    {
+        syslog(LOG_ERR, "Source path error:%d",errno);
+        exit(EXIT_FAILURE);
     }
 
-    if (dir_source)
+    syslog(LOG_NOTICE, "LOOKING INTO: %s", (char*)dir_source);
+
+    while ((entry_source = readdir(dir_source)) != NULL)
     {
-        syslog(LOG_NOTICE, "LOOKING INTO: %s", (char*)dir_source);
+        if(strcmp(entry_source->d_name, ".") == 0 || strcmp(entry_source->d_name, "..") == 0)
+            continue;
 
-        while ((entry_source = readdir(dir_source)) != NULL)
+        dir_dest = opendir(dest);
+
+        if(dir_dest == NULL)
         {
-            if(strcmp(entry_source->d_name, ".") == 0 || strcmp(entry_source->d_name, "..") == 0)
-                continue;
-            dir_dest = opendir(dest);
-
-            switch (errno) {
-                case EACCES:
-                    syslog(LOG_ERR, "EACCES: %s",dest);
-                    break;
-                case EBADF  :
-                    syslog(LOG_ERR, "EBADF: %s",dest);
-                    break;
-                case EMFILE :
-                    syslog(LOG_ERR, "EMFILE: %s",dest);
-                    break;
-                case ENFILE   :
-                    syslog(LOG_ERR, "ENFILE: %s",dest);
-                    break;
-                case ENOENT :
-                    syslog(LOG_ERR, "ENOENT: %s",dest);
-                    break;
-                case ENOMEM :
-                    syslog(LOG_ERR, "ENOMEM: %s",dest);
-                    break;
-                case ENOTDIR:
-                    syslog(LOG_ERR, "ENOTDIR: %s",dest);
-                    break;
-            }
-
-            if(dir_dest)
-            {
-                syslog(LOG_NOTICE, "COMPARING WITH: %s", (char*)dir_dest);
-
-                while((entry_dest = readdir(dir_dest)) != NULL)
-                {
-                    if(strcmp(entry_dest->d_name, ".") == 0 || strcmp(entry_dest->d_name, "..") == 0)
-                        continue;
-                    sourcePath = AddFileNameToDirPath(source,entry_source->d_name);
-                    destPath = AddFileNameToDirPath(dest, entry_source->d_name);
-
-
-                    if(entry_source->d_name != entry_dest->d_name ||
-                    ModificationTime(sourcePath) > ModificationTime(destPath) || !(isRegularFile(destPath))) //zamienic na cos innego jesli rekurencja nie bedzie dzialala
-                    {
-                        //skopiuj plik z  source do dest
-                        if(FileSize(sourcePath)< fileSizeThreshold)
-                        {
-                            CopyFileNormal(sourcePath,destPath);
-                        }
-                        else
-                        {
-                            CopyFileMmap(sourcePath,destPath);
-                        }
-                    }
-                    else
-                    {
-
-                        //jesli sa takie same przejdz do nast pliku sourceDir
-                        break;
-                    }
-                    syslog(LOG_NOTICE, "CHECKING: %s WITH %s", entry_source->d_name, entry_dest->d_name);
-                    free(sourcePath);
-                    free(destPath);
-                }
-
-                closedir(dir_dest);
-            }
+            syslog(LOG_ERR, "Destination path error:%d",errno);
+            exit(EXIT_FAILURE);
         }
 
-        closedir(dir_source);
+        syslog(LOG_NOTICE, "COMPARING WITH: %s", (char*)dir_dest);
+
+        while((entry_dest = readdir(dir_dest)) != NULL)
+        {
+            if(strcmp(entry_dest->d_name, ".") == 0 || strcmp(entry_dest->d_name, "..") == 0)
+                continue;
+            sourcePath = AddFileNameToDirPath(source,entry_source->d_name);
+            destPath = AddFileNameToDirPath(dest, entry_source->d_name);
+
+
+            if(entry_source->d_name != entry_dest->d_name ||
+            ModificationTime(sourcePath) > ModificationTime(destPath) || !(isRegularFile(destPath))) //zamienic na cos innego jesli rekurencja nie bedzie dzialala
+            {
+                //skopiuj plik z  source do dest
+                if(FileSize(sourcePath)< fileSizeThreshold)
+                {
+                    CopyFileNormal(sourcePath,destPath);
+                }
+                else
+                {
+                    CopyFileMmap(sourcePath,destPath);
+                }
+            }
+            else
+            {
+
+                //jesli sa takie same przejdz do nast pliku sourceDir
+                break;
+            }
+            syslog(LOG_NOTICE, "CHECKING: %s WITH %s", entry_source->d_name, entry_dest->d_name);
+            free(sourcePath);
+            free(destPath);
+        }
+
+        closedir(dir_dest);
     }
+
+    closedir(dir_source);
 }
 
 int main(int argc, char **argv) {
@@ -508,7 +447,7 @@ int main(int argc, char **argv) {
 //    - int sleepTime; // czas snu Daemona
 //    - char* source, dest; // Ścieżki do plików/katalogów źródłowego i docelowego
 //    - bool allowRecursion; // Tryb umożliwiający rekurencyjną synchronizację
-    CheckArguments(argc, argv);
+    InitializeParameters(argc, argv);
 
     InitializeDaemon();
 
