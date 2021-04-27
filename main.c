@@ -56,7 +56,7 @@ int isRegularFile(const char *path) {
     struct stat statbuffer;
     if (stat(path, &statbuffer) != 0) //success = 0
         return 0;
-    return S_ISREG(statbuffer.st_mode); //0 jesli NIE jest katalogiem
+    return S_ISREG(statbuffer.st_mode); //0 jesli NIE jest plikiem
 }
 
 // Sprawdza czy plik o podanej ścieżce jest dowiązaniem symbolicznym
@@ -414,9 +414,8 @@ void Synchronization()
                     destPath = AddFileNameToDirPath(dest, entry_source->d_name);
 
 
-
-                    if(!CompareFiles(sourcePath,destPath) ||
-                    ModificationTime(sourcePath) > ModificationTime(destPath))
+                    if(entry_source->d_name != entry_dest->d_name ||
+                    ModificationTime(sourcePath) > ModificationTime(destPath) || !(isRegularFile(destPath))) //zamienic na cos innego jesli rekurencja nie bedzie dzialala
                     {
                         //skopiuj plik z  source do dest
                         if(FileSize(sourcePath)< fileSizeThreshold)
