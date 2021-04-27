@@ -139,6 +139,61 @@ int CopyFileNormal(char *sourcePath, char *destinationPath)
 
 }
 
+// Usuwanie pliku / katalogu
+void DeleteEntry(const char *relativePath)
+{
+    if (isRegularFile(relativePath))
+    {
+        if (unlink(relativePath))
+        {
+            syslog(LOG_ERR, "Error while deleting file: %s\nerrno = %d", relativePath, errno);
+            exit(EXIT_FAILURE);
+        }
+
+        syslog(LOG_NOTICE, "DELETED FILE: %s\n", relativePath);
+    }
+    else
+    {
+        if (unlinkat(AT_FDCWD, relativePath, AT_REMOVEDIR))
+        {
+            if(errno == ENOTEMPTY)
+            {
+                DIR* dir;
+                struct dirent *entry;
+
+                dir = opendir(relativePath);
+
+                if(dir == NULL)
+                {
+                    syslog(LOG_ERR, "Error while opening dir to delete: %s\nerrno = %d\n", relativePath, errno);
+                    exit(EXIT_FAILURE);
+                }
+
+                while((entry = readdir(dir)) != NULL)
+                {
+                    if(strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+                        continue;
+
+                    DeleteEntry(AddFileNameToDirPath(relativePath, entry->d_name));
+                }
+
+                if (unlinkat(AT_FDCWD, relativePath, AT_REMOVEDIR))
+                {
+                    syslog(LOG_ERR, "Error while deleting dir: %s\nerrno = %d\n", relativePath, errno);
+                    exit(EXIT_FAILURE);
+                }
+            }
+            else
+            {
+                syslog(LOG_ERR, "Error while deleting dir: %s\nerrno = %d\n", relativePath, errno);
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        syslog(LOG_NOTICE, "DELETED DIRECTORY: %s\n", relativePath);
+    }
+}
+
 int CopyFileMmap(char *sourcePath, char *destinationPath)
 {
     int copyFromFile = open(sourcePath, O_RDONLY);
