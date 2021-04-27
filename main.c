@@ -391,7 +391,25 @@ void Synchronization()
     {
         if(strcmp(entry_source->d_name, ".") == 0 || strcmp(entry_source->d_name, "..") == 0)
             continue;
+        sourcePath = AddFileNameToDirPath(source,entry_source->d_name);
+        destPath = AddFileNameToDirPath(dest, entry_source->d_name);
 
+
+        if(ModificationTime(sourcePath) > ModificationTime(destPath) && isRegularFile(sourcePath)) //zamienic na cos innego jesli rekurencja nie bedzie dzialala
+        {
+            //skopiuj plik z  source do dest
+            if(FileSize(sourcePath)< fileSizeThreshold)
+            {
+                CopyFileNormal(sourcePath,destPath);
+            }
+            else
+            {
+                CopyFileMmap(sourcePath,destPath);
+            }
+        }
+        syslog(LOG_NOTICE, "CHECKING: %s WITH %s", entry_source->d_name, entry_dest->d_name);
+        free(sourcePath);
+        free(destPath);
         dir_dest = opendir(dest);
 
         if(dir_dest == NULL)
@@ -406,32 +424,7 @@ void Synchronization()
         {
             if(strcmp(entry_dest->d_name, ".") == 0 || strcmp(entry_dest->d_name, "..") == 0)
                 continue;
-            sourcePath = AddFileNameToDirPath(source,entry_source->d_name);
-            destPath = AddFileNameToDirPath(dest, entry_source->d_name);
 
-
-            if(entry_source->d_name != entry_dest->d_name ||
-            ModificationTime(sourcePath) > ModificationTime(destPath) || !(isRegularFile(destPath))) //zamienic na cos innego jesli rekurencja nie bedzie dzialala
-            {
-                //skopiuj plik z  source do dest
-                if(FileSize(sourcePath)< fileSizeThreshold)
-                {
-                    CopyFileNormal(sourcePath,destPath);
-                }
-                else
-                {
-                    CopyFileMmap(sourcePath,destPath);
-                }
-            }
-            else
-            {
-
-                //jesli sa takie same przejdz do nast pliku sourceDir
-                break;
-            }
-            syslog(LOG_NOTICE, "CHECKING: %s WITH %s", entry_source->d_name, entry_dest->d_name);
-            free(sourcePath);
-            free(destPath);
         }
 
         closedir(dir_dest);
