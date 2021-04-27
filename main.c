@@ -411,7 +411,7 @@ void Synchronization()
                     if(strcmp(entry_dest->d_name, ".") == 0 || strcmp(entry_dest->d_name, "..") == 0)
                         continue;
                     sourcePath = AddFileNameToDirPath(source,entry_source->d_name);
-                    destPath = AddFileNameToDirPath(dest, entry_dest->d_name);
+                    destPath = AddFileNameToDirPath(dest, entry_source->d_name);
 
 
 
@@ -472,11 +472,11 @@ int main(int argc, char **argv) {
     //Sprawdź czy po pobudce katalogi istnieją
     CheckPaths();
 
-    //Synchronization();
+    Synchronization();
     //sprawdzanie kopiowania (DEBUG)
-    char *src = "/home/student/empty";
-    char *dest = "/home/student/Muzyka/emptyyy";
-    CopyFileMmap(src,dest);
+//    char *src = "/home/student/empty";
+//    char *dest = "/home/student/Muzyka/emptyyy";
+//    CopyFileMmap(src,dest);
     syslog(LOG_NOTICE, "DAEMON EXORCUMCISED\n");
     closelog();
 
