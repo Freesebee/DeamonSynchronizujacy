@@ -153,7 +153,7 @@ int CopyFileMmap(char *sourcePath, char *destinationPath)
     struct stat pathStat;
     stat(sourcePath,&pathStat);
     char *mappedFile = mmap(NULL,pathStat.st_size, PROT_READ, MAP_SHARED,copyFromFile,0);
-    if (mappedFile <= 0)
+    if (mappedFile == NULL)
     {
         return(-1);
     }
