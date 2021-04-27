@@ -56,7 +56,7 @@ int isRegularFile(const char *path) {
     struct stat statbuffer;
     if (stat(path, &statbuffer) != 0) //success = 0
         return 0;
-    return S_ISREG(statbuffer.st_mode); //0 jesli NIE jest katalogiem
+    return S_ISREG(statbuffer.st_mode); //0 jesli NIE jest plikiem
 }
 
 // Sprawdza czy plik o podanej ścieżce jest dowiązaniem symbolicznym
@@ -107,6 +107,13 @@ time_t ModificationTime(char *path)
     return time;
 }
 
+off_t FileSize(char *path) //jesli nie bedzie dzialalo to zmienic typ na _off_t
+{
+    struct stat pathStat;
+    stat(path,&pathStat);
+    off_t size = pathStat.st_size;
+    return size;
+}
 // Kopiowanie pliku z katalogu 1 do katalogu 2
 int CopyFileNormal(char *sourcePath, char *destinationPath)
 {
@@ -132,7 +139,7 @@ int CopyFileNormal(char *sourcePath, char *destinationPath)
             return(-1);
         }
     }
-
+    syslog(LOG_NOTICE, "Copying file %s and writing to file %s was a success",sourcePath,destinationPath);
     close(copyFromFile);
     close(copyToFile);
     free(buffer);
@@ -201,7 +208,7 @@ int CopyFileMmap(char *sourcePath, char *destinationPath)
     struct stat pathStat;
     stat(sourcePath,&pathStat);
     char *mappedFile = mmap(NULL,pathStat.st_size, PROT_READ, MAP_SHARED,copyFromFile,0);
-    if (mappedFile <= 0)
+    if (mappedFile == NULL)
     {
         return(-1);
     }
@@ -211,6 +218,7 @@ int CopyFileMmap(char *sourcePath, char *destinationPath)
         syslog(LOG_ERR, " Error reading file: %s or writing to file: %s",sourcePath,destinationPath);
         return(-1);
     }
+    syslog(LOG_NOTICE, "Copying file %s and writing to file %s was a success",sourcePath,destinationPath);
     close(copyFromFile);
     close(copyToFile);
 
@@ -303,7 +311,7 @@ void CheckArguments(int argc, char **argv)
         {
             if(st_set)
             {
-                printf("Parametr sleepTime zosal juz zainicjalizowany\n");
+                printf("Parametr sleepTime zostal juz zainicjalizowany\n");
                 exit(EXIT_FAILURE);
             }
 
@@ -457,18 +465,15 @@ void Synchronization()
                 {
                     if(strcmp(entry_dest->d_name, ".") == 0 || strcmp(entry_dest->d_name, "..") == 0)
                         continue;
-                    //TODO: porownanie plikow funkcja compareFiles
                     sourcePath = AddFileNameToDirPath(source,entry_source->d_name);
-                    destPath = AddFileNameToDirPath(dest, entry_dest->d_name);
+                    destPath = AddFileNameToDirPath(dest, entry_source->d_name);
 
-                    struct stat srcStat;
-                    stat(sourcePath,&srcStat);
 
-                    if(!CompareFiles(sourcePath,destPath) ||
-                    ModificationTime(sourcePath) > ModificationTime(destPath))
+                    if(entry_source->d_name != entry_dest->d_name ||
+                    ModificationTime(sourcePath) > ModificationTime(destPath) || !(isRegularFile(destPath))) //zamienic na cos innego jesli rekurencja nie bedzie dzialala
                     {
                         //skopiuj plik z  source do dest
-                        if(srcStat.st_size < fileSizeThreshold)
+                        if(FileSize(sourcePath)< fileSizeThreshold)
                         {
                             CopyFileNormal(sourcePath,destPath);
                         }
@@ -523,8 +528,8 @@ int main(int argc, char **argv) {
 
     Synchronization();
     //sprawdzanie kopiowania (DEBUG)
-//    char *src = "/home/student/przyklad1";
-//    char *dest = "/home/student/Muzyka/przykladcopied";
+//    char *src = "/home/student/empty";
+//    char *dest = "/home/student/Muzyka/emptyyy";
 //    CopyFileMmap(src,dest);
     syslog(LOG_NOTICE, "DAEMON EXORCUMCISED\n");
     closelog();
