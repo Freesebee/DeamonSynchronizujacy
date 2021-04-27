@@ -474,9 +474,9 @@ int main(int argc, char **argv) {
 
     //Synchronization();
     //sprawdzanie kopiowania (DEBUG)
-    char *src = "/home/student/przyklad1";
-    char *dest = "/home/student/Muzyka/przykladcopied";
-    CopyFileMmap(src,dest);
+//    char *src = "/home/student/przyklad1";
+//    char *dest = "/home/student/Muzyka/przykladcopied";
+//    CopyFileMmap(src,dest);
     syslog(LOG_NOTICE, "DAEMON EXORCUMCISED\n");
     closelog();
 
