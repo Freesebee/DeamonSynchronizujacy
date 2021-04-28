@@ -430,7 +430,7 @@ void SyncCopy(char *sourceA, char *destA)
             dstModTime = ModificationTime(destPath);
 
             if (strcmp(entry_source->d_name,entry_dest->d_name) == 0 && srcModTime < dstModTime)
-            {//TODO: && isRegularFile(sourcePath)) //zamienic na cos innego jesli rekurencja nie bedzie dzialala
+            {
                 if (isRegularFile(sourcePath))
                 {
                     allowCopy = false;
