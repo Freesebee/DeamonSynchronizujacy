@@ -117,7 +117,7 @@ int CopyFileNormal(char *sourcePath, char *destinationPath)
             return(-1);
         }
     }
-    syslog(LOG_NOTICE, "Copying file %s and writing to file %s was a success",sourcePath,destinationPath);
+    syslog(LOG_NOTICE, "Copying file %s and writing to file using read/write %s was a success",sourcePath,destinationPath);
     close(copyFromFile);
     close(copyToFile);
     free(buffer);
@@ -196,7 +196,7 @@ int CopyFileMmap(char *sourcePath, char *destinationPath)
         syslog(LOG_ERR, " Error reading file: %s or writing to file: %s",sourcePath,destinationPath);
         return(-1);
     }
-    syslog(LOG_NOTICE, "Copying file %s and writing to file %s was a success",sourcePath,destinationPath);
+    syslog(LOG_NOTICE, "Copying file %s and writing to file %s using mmap/write was a success",sourcePath,destinationPath);
     close(copyFromFile);
     close(copyToFile);
 
@@ -481,6 +481,89 @@ void SyncDelete()
     closedir(dir_dest);
 }
 
+// V2
+void SyncCopyV()
+{
+    DIR *dir_dest, *dir_source;
+    struct dirent *entry_dest, *entry_source;
+    char *sourcePath, *destPath;
+
+    bool allowCopy = true;
+
+    dir_source = opendir(source);
+
+    if (dir_source == NULL) {
+        syslog(LOG_ERR, "COPY:OPENDIR(SOURCE) RETURNED WITH ERROR:%d\n", errno);
+        exit(EXIT_FAILURE);
+    }
+
+    while ((entry_source = readdir(dir_source)) != NULL)
+    {
+        allowCopy = true;
+
+        if (strcmp(entry_source->d_name, ".") == 0 || strcmp(entry_source->d_name, "..") == 0)
+            continue;
+
+        dir_dest = opendir(dest);
+
+        if (dir_dest == NULL) {
+            syslog(LOG_ERR, "COPY:OPENDIR(DEST) RETURNED WITH ERROR:%d\n", errno);
+            exit(EXIT_FAILURE);
+        }
+        sourcePath = AddFileNameToDirPath(source, entry_source->d_name);
+
+        while ((entry_dest = readdir(dir_dest)) != NULL)
+        {
+            if (strcmp(entry_dest->d_name, ".") == 0 || strcmp(entry_dest->d_name, "..") == 0)
+                continue;
+
+            destPath = AddFileNameToDirPath(dest, entry_dest->d_name);
+
+            if (strcmp(entry_source->d_name, entry_dest->d_name) == 0) //TODO: Zabezpieczyć porównanie pliku z katalogiem
+            {
+                allowCopy = false;
+               if (isRegularFile(sourcePath))
+               {
+                   if (ModificationTime(sourcePath) > ModificationTime(destPath)) //zamienic na cos innego jesli rekurencja nie bedzie dzialala
+                   {
+                       //skopiuj plik z  source do dest
+                       if (FileSize(sourcePath) < fileSizeThreshold) {
+                           syslog(LOG_NOTICE, "COPY NORMAL\n");
+                           CopyFileNormal(sourcePath, destPath);
+                       }
+                       else {
+                           syslog(LOG_NOTICE, "COPY MMAP\n");
+                           CopyFileMmap(sourcePath, destPath);
+                       }
+                   }
+               }
+                free(destPath);
+                break;
+            }
+            free(destPath);
+        }
+        destPath = AddFileNameToDirPath(dest, entry_source->d_name);
+
+        if(allowCopy)
+        {
+            if (FileSize(sourcePath) < fileSizeThreshold) {
+                syslog(LOG_NOTICE, "COPY NORMAL\n");
+                CopyFileNormal(sourcePath, destPath);
+            }
+            else {
+                syslog(LOG_NOTICE, "COPY MMAP\n");
+                CopyFileMmap(sourcePath, destPath);
+            }
+        }
+        free(sourcePath);
+        free(destPath);
+        closedir(dir_source);
+    }
+
+    closedir(dir_dest);
+}
+
+
 int main(int argc, char **argv)
 {
 
@@ -507,8 +590,8 @@ int main(int argc, char **argv)
     //Sprawdź czy po pobudce katalogi istnieją
     CheckPaths();
 
-    SyncDelete();
-    SyncCopy();
+    //SyncDelete();
+    SyncCopyV();
 
     syslog(LOG_NOTICE, "<<<<<<<<<<<<<<<< DAEMON EXORCUMCISED\n");
     closelog();
