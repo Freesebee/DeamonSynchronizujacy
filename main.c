@@ -108,7 +108,7 @@ int CopyFileNormal(char *sourcePath, char *destinationPath)
     char *buffer = malloc(sizeof(char) * BUFFER_SIZE);
 
     if (buffer == NULL) {
-        syslog(LOG_ERR, "Memory allocation error");
+        syslog(LOG_ERR, "COPY[read/write]:MEMORY ALLOCATION ERROR");
         close(copyFromFile);
         close(copyToFile);
         return (-1);
@@ -121,11 +121,11 @@ int CopyFileNormal(char *sourcePath, char *destinationPath)
         }
         ssize_t bytesWritten = write(copyToFile, buffer, bytesRead);
         if (bytesWritten != bytesRead) {
-            syslog(LOG_ERR, " Error reading file: %s or writing to file: %s",sourcePath,destinationPath);
+            syslog(LOG_ERR, "ERROR READING FILE: %s OR WRITING TO: %s",sourcePath,destinationPath);
             return(-1);
         }
     }
-    syslog(LOG_NOTICE, "Copying file %s and writing to file %s using read/write was a success",sourcePath,destinationPath);
+    syslog(LOG_NOTICE, "COPYING [read/write] %s TO %s",sourcePath,destinationPath);
     close(copyFromFile);
     close(copyToFile);
     free(buffer);
@@ -201,10 +201,10 @@ int CopyFileMmap(char *sourcePath, char *destinationPath)
     ssize_t bytesWritten = write(copyToFile, mappedFile, pathStat.st_size);
     if (bytesWritten != pathStat.st_size)
     {
-        syslog(LOG_ERR, " Error reading file: %s or writing to file: %s",sourcePath,destinationPath);
+        syslog(LOG_ERR, "ERROR READING FILE: %s OR WRITING TO: %s",sourcePath,destinationPath);
         return(-1);
     }
-    syslog(LOG_NOTICE, "Copying file %s and writing to file %s using mmap/write was a success",sourcePath,destinationPath);
+    syslog(LOG_NOTICE, "COPYING [mmap] %s TO %s",sourcePath,destinationPath);
     close(copyFromFile);
     close(copyToFile);
 
@@ -373,6 +373,7 @@ void InitializeDaemon()
 
 void SyncCopy()
 {
+    bool allowCopy;
     DIR *dir_dest, *dir_source;
     struct dirent *entry_dest, *entry_source;
     char *sourcePath, *destPath;
@@ -382,53 +383,65 @@ void SyncCopy()
 
     if (dir_source == NULL)
     {
-        syslog(LOG_ERR, "Source path error:%d\n", errno);
+        syslog(LOG_ERR, "SOURCE PATH ERROR:%d\n", errno);
         exit(EXIT_FAILURE);
     }
 
-    while ((entry_source = readdir(dir_source)) != NULL){
-        if (strcmp(entry_source->d_name, ".") == 0 || strcmp(entry_source->d_name, "..") == 0)
+    while ((entry_source = readdir(dir_source)) != NULL)
+    {
+        sourcePath = AddFileNameToDirPath(source, entry_source->d_name);
+        destPath = AddFileNameToDirPath(dest, entry_source->d_name);
+
+        //pomijanie twardych dowiązań do obecnego i nadrzędnego katalogu
+        if ((strcmp(entry_source->d_name, ".") == 0 || strcmp(entry_source->d_name, "..") == 0)
+            || (!allowRecursion && isDirectory(sourcePath)))
+        {
+            //syslog(LOG_NOTICE, "COPY:SKIPPING:%s",sourcePath); //TODO: WYWAL
+            free(sourcePath);
             continue;
+        }
 
         dir_dest = opendir(dest);
 
-        if (dir_dest == NULL) {
-            syslog(LOG_ERR, "Destination path error:%d\n", errno);
+        if (dir_dest == NULL)
+        {
+            syslog(LOG_ERR, "DESTINATION PATH ERROR:%d\n", errno);
             exit(EXIT_FAILURE);
         }
-//s
-        while ((entry_dest = readdir(dir_dest)) != NULL){
+
+        allowCopy = true;
+
+        while ((entry_dest = readdir(dir_dest)) != NULL)
+        {
             if (strcmp(entry_dest->d_name, ".") == 0 || strcmp(entry_dest->d_name, "..") == 0)
                 continue;
 
-            sourcePath = AddFileNameToDirPath(source, entry_source->d_name);
-            destPath = AddFileNameToDirPath(dest, entry_source->d_name);
+            //syslog(LOG_NOTICE, "CHECKING: %s WITH %s\n",entry_source->d_name,entry_dest->d_name); //TODO WYWAL
 
-            syslog(LOG_NOTICE, "CHECKING: %s WITH %s\n",entry_source->d_name,entry_dest->d_name);
             srcModTime = ModificationTime(sourcePath);
             dstModTime = ModificationTime(destPath);
-            if (srcModTime > dstModTime &&
-                isRegularFile(sourcePath)) //zamienic na cos innego jesli rekurencja nie bedzie dzialala
+
+            if (strcmp(entry_source->d_name,entry_dest->d_name) == 0 && srcModTime < dstModTime)
+                //TODO: && isRegularFile(sourcePath)) //zamienic na cos innego jesli rekurencja nie bedzie dzialala
             {
-                //skopiuj plik z  source do dest
-                if (FileSize(sourcePath) < fileSizeThreshold) {
-                    syslog(LOG_NOTICE, "COPY NORMAL\n");
-                    //CopyFileNormal(sourcePath, destPath);
-                } else {
-                    syslog(LOG_NOTICE, "COPY MMAP\n");
-                    //CopyFileMmap(sourcePath, destPath);
-                }
+                //syslog(LOG_NOTICE, "FOUND EQUIVALENT WITH ACTUAL MODIFICATION DATE: %s\n",destPath); //TODO WYWAL
+                allowCopy = false;
+                break;
             }
-
-            syslog(LOG_NOTICE, "1# CHECKING: %s WITH %s\n",entry_source->d_name,entry_dest->d_name);
-
-            free(sourcePath);
-            free(destPath);
-
-            syslog(LOG_NOTICE, "2# CHECKING: %s WITH %s\n",entry_source->d_name,entry_dest->d_name);
-
-            closedir(dir_dest);
         }
+
+        if(allowCopy)
+        {
+            if (FileSize(sourcePath) < fileSizeThreshold) {
+                CopyFileNormal(sourcePath, destPath);
+            } else {
+                CopyFileMmap(sourcePath, destPath);
+            }
+        }
+
+        closedir(dir_dest);
+        free(sourcePath);
+        free(destPath);
     }
 
     closedir(dir_source);
@@ -474,7 +487,7 @@ void SyncDelete()
     dir_dest = opendir(dest);
 
     if (dir_dest == NULL) {
-        syslog(LOG_ERR, "DELETION:OPENDIR(SOURCE) RETURNED WITH ERROR:%d\n", errno);
+        syslog(LOG_ERR, "DELETE:OPENDIR(SOURCE) RETURNED WITH ERROR:%d\n", errno);
         exit(EXIT_FAILURE);
     }
 
@@ -484,6 +497,7 @@ void SyncDelete()
 
         destPath = AddFileNameToDirPath(dest, entry_dest->d_name);
 
+        //pomijanie twardych dowiązań do obecnego i nadrzędnego katalogu
         if ((strcmp(entry_dest->d_name, ".") == 0 || strcmp(entry_dest->d_name, "..") == 0)
             || !allowRecursion && isDirectory(AddFileNameToDirPath(dest, entry_dest->d_name)))
         {
@@ -508,7 +522,7 @@ void SyncDelete()
 
             //syslog(LOG_NOTICE, "CHECKING: %s WITH %s\n",entry_dest->d_name,entry_source->d_name); //TODO: WYWAL
 
-            if (strcmp(entry_source->d_name, entry_dest->d_name) == 0)
+            if (strcmp(entry_source->d_name, entry_dest->d_name) == 0) //TODO: Zabezpiecz jezeli source nie jest plikiem/katalogiem
             {
                 allowDelete = false;
                 break;
