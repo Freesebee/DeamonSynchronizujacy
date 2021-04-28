@@ -148,7 +148,7 @@ void DeleteEntry(char *relativePath)
 
                 if(dir == NULL)
                 {
-                    syslog(LOG_ERR, "Error while opening dir to delete: %s\nerrno = %d\n", relativePath, errno);
+                    syslog(LOG_ERR, "ERROR WHILE OPENING DIR TO DELETE: %s\nerrno = %d\n", relativePath, errno);
                     exit(EXIT_FAILURE);
                 }
 
@@ -162,13 +162,13 @@ void DeleteEntry(char *relativePath)
 
                 if (unlinkat(AT_FDCWD, relativePath, AT_REMOVEDIR))
                 {
-                    syslog(LOG_ERR, "Error while deleting dir: %s\nerrno = %d\n", relativePath, errno);
+                    syslog(LOG_ERR, "Error while deleting dir: %s\n errno = %d\n", relativePath, errno);
                     exit(EXIT_FAILURE);
                 }
             }
             else
             {
-                syslog(LOG_ERR, "Error while deleting dir: %s\nerrno = %d\n", relativePath, errno);
+                syslog(LOG_ERR, "Error while deleting dir: %s\n errno = %d\n", relativePath, errno);
                 exit(EXIT_FAILURE);
             }
         }
@@ -179,7 +179,7 @@ void DeleteEntry(char *relativePath)
     {
         if (unlink(relativePath))
         {
-            syslog(LOG_ERR, "Error while deleting file: %s\nerrno = %d", relativePath, errno);
+            syslog(LOG_ERR, "Error while deleting file: %s\n errno = %d", relativePath, errno);
             exit(EXIT_FAILURE);
         }
 
@@ -442,6 +442,35 @@ void SyncDelete()
 
     bool allowDelete = true;
 
+//    WHILE(SA PLIKI W DEST)
+//    {
+//        WHILE(SA PLIKI W SOURCE)
+//        {
+//            ZNAJDZ ODPOWIEDNIK
+//        }
+//
+//        JEZELI BRAK ODPOWIEDNIKA TO USUN
+//    }
+//
+//    WHILE(SOURCE ZAWIERA PODKATALOGI)
+//    {
+//        if(SOURCE I DEST MAJĄ TEN SAM PODKATALOG)
+//        {
+//            WEJDZ DO PODKATALOGU SOURCE
+//            WEJDZ DO PODKATALOGU DEST
+//
+//            WHILE(SA PLIKI W DEST)
+//            {
+//                WHILE(SA PLIKI W SOURCE)
+//                {
+//                    ZNAJDZ ODPOWIEDNIK
+//                }
+//
+//                JEZELI BRAK ODPOWIEDNIKA TO USUN
+//            }
+//        }
+//    }
+
     dir_dest = opendir(dest);
 
     if (dir_dest == NULL) {
@@ -453,13 +482,20 @@ void SyncDelete()
     {
         allowDelete = true;
 
-        if (strcmp(entry_dest->d_name, ".") == 0 || strcmp(entry_dest->d_name, "..") == 0)
+        destPath = AddFileNameToDirPath(dest, entry_dest->d_name);
+
+        if ((strcmp(entry_dest->d_name, ".") == 0 || strcmp(entry_dest->d_name, "..") == 0)
+            || !allowRecursion && isDirectory(AddFileNameToDirPath(dest, entry_dest->d_name)))
+        {
+            //syslog(LOG_NOTICE, "DELETE:SKIPPING: %s\n", destPath); //TODO: WYWAL
+            free(destPath);
             continue;
+        }
 
         dir_source = opendir(source);
 
-        if (dir_dest == NULL) {
-            syslog(LOG_ERR, "DELETION:OPENDIR(DEST) RETURNED WITH ERROR:%d\n", errno);
+        if (dir_source == NULL) {
+            syslog(LOG_ERR, "DELETE:OPENDIR(DEST) RETURNED WITH ERROR:%d\n", errno);
             exit(EXIT_FAILURE);
         }
 
@@ -470,25 +506,27 @@ void SyncDelete()
 
             sourcePath = AddFileNameToDirPath(source, entry_source->d_name);
 
-            if (strcmp(entry_source->d_name, entry_dest->d_name) == 0) //TODO: Zabezpieczyć porównanie pliku z katalogiem
+            //syslog(LOG_NOTICE, "CHECKING: %s WITH %s\n",entry_dest->d_name,entry_source->d_name); //TODO: WYWAL
+
+            if (strcmp(entry_source->d_name, entry_dest->d_name) == 0)
             {
                 allowDelete = false;
-                free(sourcePath);
                 break;
             }
-
-            free(sourcePath);
         }
 
         if(allowDelete)
         {
-            DeleteEntry(AddFileNameToDirPath(dest, entry_dest->d_name));
+            DeleteEntry(destPath);
         }
 
-        closedir(dir_dest);
+        free(sourcePath);
+        free(destPath);
+
+        closedir(dir_source);
     }
 
-    closedir(dir_source);
+    closedir(dir_dest);
 }
 
 // V2
