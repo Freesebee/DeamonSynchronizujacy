@@ -376,7 +376,8 @@ void SyncCopy()
     DIR *dir_dest, *dir_source;
     struct dirent *entry_dest, *entry_source;
     char *sourcePath, *destPath;
-
+    time_t srcModTime;
+    time_t dstModTime;
     dir_source = opendir(source);
 
     if (dir_source == NULL)
@@ -404,8 +405,9 @@ void SyncCopy()
             destPath = AddFileNameToDirPath(dest, entry_source->d_name);
 
             syslog(LOG_NOTICE, "CHECKING: %s WITH %s\n",entry_source->d_name,entry_dest->d_name);
-
-            if (ModificationTime(sourcePath) > ModificationTime(destPath) &&
+            srcModTime = ModificationTime(sourcePath);
+            dstModTime = ModificationTime(destPath);
+            if (srcModTime > dstModTime &&
                 isRegularFile(sourcePath)) //zamienic na cos innego jesli rekurencja nie bedzie dzialala
             {
                 //skopiuj plik z  source do dest
@@ -483,10 +485,10 @@ void SyncDelete()
             DeleteEntry(AddFileNameToDirPath(dest, entry_dest->d_name));
         }
 
-        closedir(dir_source);
+        closedir(dir_dest);
     }
 
-    closedir(dir_dest);
+    closedir(dir_source);
 }
 
 // V2
@@ -555,18 +557,21 @@ void SyncCopyV()
         destPath = AddFileNameToDirPath(dest, entry_source->d_name);
         if(allowCopy)
         {
-            if (FileSize(sourcePath) < fileSizeThreshold) {
-                CopyFileNormal(sourcePath, destPath);
-            } else {
-                CopyFileMmap(sourcePath, destPath);
+            if(isRegularFile(sourcePath))
+            {
+                if (FileSize(sourcePath) < fileSizeThreshold) {
+                    CopyFileNormal(sourcePath, destPath);
+                } else {
+                    CopyFileMmap(sourcePath, destPath);
+                }
             }
         }
+        closedir(dir_dest);
         free(sourcePath);
         free(destPath);
-        closedir(dir_source);
     }
 
-    closedir(dir_dest);
+    closedir(dir_source);
     free(entry_source);
 
 }
@@ -657,7 +662,7 @@ int main(int argc, char **argv)
     CheckPaths();
 
     //SyncDelete();
-    SyncCopyV();
+    SyncCopy();
 
     syslog(LOG_NOTICE, "<<<<<<<<<<<<<<<< DAEMON EXORCUMCISED\n");
     closelog();
