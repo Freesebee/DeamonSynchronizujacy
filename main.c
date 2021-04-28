@@ -23,13 +23,13 @@
 char *source; // ścieżka do katalogu źródłowego
 char *dest; // ścieżka do katalogu docelowego
 
-bool allowRecursion; //[Parametr: -R]
+bool allowRecursion = false; //[Parametr: -R]
 // Tryb umożliwiający rekurencyjną synchronizację
 
-int fileSizeThreshold; //[Parametr: -fs]
+int fileSizeThreshold = DEFAULT_FILE_SIZE_THRESHOLD; //[Parametr: -fs]
 // Próg dzielący pliki małe od dużych przy ich kopiowaniu
 
-int sleepTime; //[Parametr: -st]
+int sleepTime = DEFAULT_SLEEP_TIME; //[Parametr: -st]
 // czas snu Daemona
 
 // otwiera logi, pierwszy argument jest dodawany na poczatek kazdego logu
@@ -125,7 +125,7 @@ int CopyFileNormal(char *sourcePath, char *destinationPath)
 }
 
 // Usuwanie pliku / katalogu
-void DeleteEntry(const char *relativePath)
+void DeleteEntry(char *relativePath)
 {
     if (isDirectory(relativePath))
     {
@@ -233,9 +233,6 @@ void InitializeParameters(int argc, char **argv)
     }
     else {
         source = realpath(argv[1], NULL);
-
-        //TODO: Nie wiem czy powinniśmy przechowywać wskaźnik do argumentów programu czy
-        //      zaalokować pamięć dla zmiennych
     }
 
     // Sprawdzanie czy sciezka docelowa to katalog
@@ -247,11 +244,6 @@ void InitializeParameters(int argc, char **argv)
     else {
         dest = realpath(argv[2], NULL);
     }
-
-    //Domyślna inicjalizacja zmiennych globalnych
-    sleepTime = DEFAULT_SLEEP_TIME;
-    fileSizeThreshold = DEFAULT_FILE_SIZE_THRESHOLD;
-    allowRecursion = false;
 
     int i;
     bool fs_set = false, st_set = false, R_set = false;
@@ -314,14 +306,14 @@ void CheckPaths()
     // Sprawdzanie czy sciezka zrodlowa to katalog
     if (isDirectory(source) == 0)
     {
-        syslog(LOG_ERR, "Ścieżka źródłowa nie istnieje/nie jest katalogiem\n");
+        syslog(LOG_ERR, "Source path is not a directory\n");
         exit(EXIT_FAILURE);
     }
 
     // Sprawdzanie czy sciezka docelowa to katalog
     if (isDirectory(dest) == 0)
     {
-        syslog(LOG_ERR, "Ścieżka docelowa nie istnieje/nie jest katalogiem\n");
+        syslog(LOG_ERR, "Destination path is not a directory\n");
         exit(EXIT_FAILURE);
     }
 }
@@ -371,7 +363,7 @@ void InitializeDaemon()
     //TODO: @DevToxxy wytłumacz @FreeseBee do czego to służy
 }
 
-void Synchronization()
+void SyncCopy()
 {
     DIR *dir_dest, *dir_source;
     struct dirent *entry_dest, *entry_source;
@@ -379,61 +371,118 @@ void Synchronization()
 
     dir_source = opendir(source);
 
-    if(dir_source == NULL)
+    if (dir_source == NULL)
     {
-        syslog(LOG_ERR, "Source path error:%d",errno);
+        syslog(LOG_ERR, "Source path error:%d\n", errno);
         exit(EXIT_FAILURE);
     }
 
-    syslog(LOG_NOTICE, "LOOKING INTO: %s", (char*)dir_source);
-
-    while ((entry_source = readdir(dir_source)) != NULL)
-    {
-        if(strcmp(entry_source->d_name, ".") == 0 || strcmp(entry_source->d_name, "..") == 0)
+    while ((entry_source = readdir(dir_source)) != NULL){
+        if (strcmp(entry_source->d_name, ".") == 0 || strcmp(entry_source->d_name, "..") == 0)
             continue;
-        sourcePath = AddFileNameToDirPath(source,entry_source->d_name);
-        destPath = AddFileNameToDirPath(dest, entry_source->d_name);
 
-
-        if(ModificationTime(sourcePath) > ModificationTime(destPath) && isRegularFile(sourcePath)) //zamienic na cos innego jesli rekurencja nie bedzie dzialala
-        {
-            //skopiuj plik z  source do dest
-            if(FileSize(sourcePath)< fileSizeThreshold)
-            {
-                CopyFileNormal(sourcePath,destPath);
-            }
-            else
-            {
-                CopyFileMmap(sourcePath,destPath);
-            }
-        }
-        syslog(LOG_NOTICE, "CHECKING: %s WITH %s", entry_source->d_name, entry_dest->d_name);
-        free(sourcePath);
-        free(destPath);
         dir_dest = opendir(dest);
 
-        if(dir_dest == NULL)
-        {
-            syslog(LOG_ERR, "Destination path error:%d",errno);
+        if (dir_dest == NULL) {
+            syslog(LOG_ERR, "Destination path error:%d\n", errno);
             exit(EXIT_FAILURE);
         }
 
-        syslog(LOG_NOTICE, "COMPARING WITH: %s", (char*)dir_dest);
-
-        while((entry_dest = readdir(dir_dest)) != NULL)
-        {
-            if(strcmp(entry_dest->d_name, ".") == 0 || strcmp(entry_dest->d_name, "..") == 0)
+        while ((entry_dest = readdir(dir_dest)) != NULL){
+            if (strcmp(entry_dest->d_name, ".") == 0 || strcmp(entry_dest->d_name, "..") == 0)
                 continue;
 
-        }
+            sourcePath = AddFileNameToDirPath(source, entry_source->d_name);
+            destPath = AddFileNameToDirPath(dest, entry_source->d_name);
 
-        closedir(dir_dest);
+            syslog(LOG_NOTICE, "CHECKING: %s WITH %s\n",entry_source->d_name,entry_dest->d_name);
+
+            if (ModificationTime(sourcePath) > ModificationTime(destPath) &&
+                isRegularFile(sourcePath)) //zamienic na cos innego jesli rekurencja nie bedzie dzialala
+            {
+                //skopiuj plik z  source do dest
+                if (FileSize(sourcePath) < fileSizeThreshold) {
+                    syslog(LOG_NOTICE, "COPY NORMAL\n");
+                    //CopyFileNormal(sourcePath, destPath);
+                } else {
+                    syslog(LOG_NOTICE, "COPY MMAP\n");
+                    //CopyFileMmap(sourcePath, destPath);
+                }
+            }
+
+            syslog(LOG_NOTICE, "1# CHECKING: %s WITH %s\n",entry_source->d_name,entry_dest->d_name);
+
+            free(sourcePath);
+            free(destPath);
+
+            syslog(LOG_NOTICE, "2# CHECKING: %s WITH %s\n",entry_source->d_name,entry_dest->d_name);
+
+            closedir(dir_dest);
+        }
     }
 
     closedir(dir_source);
 }
 
-int main(int argc, char **argv) {
+void SyncDelete()
+{
+    DIR *dir_dest, *dir_source;
+    struct dirent *entry_dest, *entry_source;
+    char *sourcePath, *destPath;
+
+    bool allowDelete = true;
+
+    dir_dest = opendir(dest);
+
+    if (dir_dest == NULL) {
+        syslog(LOG_ERR, "DELETION:OPENDIR(SOURCE) RETURNED WITH ERROR:%d\n", errno);
+        exit(EXIT_FAILURE);
+    }
+
+    while ((entry_dest = readdir(dir_dest)) != NULL)
+    {
+        allowDelete = true;
+
+        if (strcmp(entry_dest->d_name, ".") == 0 || strcmp(entry_dest->d_name, "..") == 0)
+            continue;
+
+        dir_source = opendir(source);
+
+        if (dir_dest == NULL) {
+            syslog(LOG_ERR, "DELETION:OPENDIR(DEST) RETURNED WITH ERROR:%d\n", errno);
+            exit(EXIT_FAILURE);
+        }
+
+        while ((entry_source = readdir(dir_source)) != NULL)
+        {
+            if (strcmp(entry_source->d_name, ".") == 0 || strcmp(entry_source->d_name, "..") == 0)
+                continue;
+
+            sourcePath = AddFileNameToDirPath(source, entry_source->d_name);
+
+            if (strcmp(entry_source->d_name, entry_dest->d_name) == 0) //TODO: Zabezpieczyć porównanie pliku z katalogiem
+            {
+                allowDelete = false;
+                free(sourcePath);
+                break;
+            }
+
+            free(sourcePath);
+        }
+
+        if(allowDelete)
+        {
+            DeleteEntry(AddFileNameToDirPath(dest, entry_dest->d_name));
+        }
+
+        closedir(dir_source);
+    }
+
+    closedir(dir_dest);
+}
+
+int main(int argc, char **argv)
+{
 
 //    Sprawdzenie poprawności parametrów
 //    oraz inicjalizacja zmiennych globalnych:
@@ -451,19 +500,17 @@ int main(int argc, char **argv) {
 //    Otworzenie pliku z logami
 //    cat /var/log/syslog | grep -i SYNCHRONIZER
     openlog("SYNCHRONIZER", LOG_PID, LOG_DAEMON);
-    syslog(LOG_NOTICE, "DAEMON SUMMONED\n");
+    syslog(LOG_NOTICE, ">>>>>>>>>>>>>>>>>>>> DAEMON SUMMONED\n");
 
     GoToSleep();
 
     //Sprawdź czy po pobudce katalogi istnieją
     CheckPaths();
 
-    Synchronization();
-    //sprawdzanie kopiowania (DEBUG)
-//    char *src = "/home/student/empty";
-//    char *dest = "/home/student/Muzyka/emptyyy";
-//    CopyFileMmap(src,dest);
-    syslog(LOG_NOTICE, "DAEMON EXORCUMCISED\n");
+    SyncDelete();
+    SyncCopy();
+
+    syslog(LOG_NOTICE, "<<<<<<<<<<<<<<<< DAEMON EXORCUMCISED\n");
     closelog();
 
     exit(EXIT_SUCCESS);
