@@ -62,6 +62,11 @@ int isRegularFile(const char *path) {
 char *AddFileNameToDirPath(char* DirPath,char* FileName)
 {
     char *finalPath = malloc(sizeof(char) * (BUFFER_SIZE));
+    if(finalPath==NULL)
+    {
+        syslog(LOG_ERR, "memory allocation error \n errno = %d", errno);
+        exit(EXIT_FAILURE);
+    }
     strcpy(finalPath,DirPath);
     strcat(finalPath, "/");
     strcat(finalPath, FileName);
@@ -79,8 +84,10 @@ bool CompareFiles(char *sourcePath, char *destinationPath)
 
 time_t ModificationTime(char *path)
 {
+
     struct stat pathStat;
-    stat(path,&pathStat);
+    if (stat(path, &pathStat) != 0) //success = 0
+        return 0;
     time_t time = pathStat.st_ctime;
     return time;
 }
@@ -88,7 +95,8 @@ time_t ModificationTime(char *path)
 off_t FileSize(char *path) //jesli nie bedzie dzialalo to zmienic typ na _off_t
 {
     struct stat pathStat;
-    stat(path,&pathStat);
+    if (stat(path, &pathStat) != 0) //success = 0
+        return 0;
     off_t size = pathStat.st_size;
     return size;
 }
@@ -117,7 +125,7 @@ int CopyFileNormal(char *sourcePath, char *destinationPath)
             return(-1);
         }
     }
-    syslog(LOG_NOTICE, "Copying file %s and writing to file using read/write %s was a success",sourcePath,destinationPath);
+    syslog(LOG_NOTICE, "Copying file %s and writing to file %s using read/write was a success",sourcePath,destinationPath);
     close(copyFromFile);
     close(copyToFile);
     free(buffer);
@@ -487,7 +495,8 @@ void SyncCopyV()
     DIR *dir_dest, *dir_source;
     struct dirent *entry_dest, *entry_source;
     char *sourcePath, *destPath;
-
+    time_t srcModTime;
+    time_t dstModTime;
     bool allowCopy = true;
 
     dir_source = opendir(source);
@@ -522,36 +531,33 @@ void SyncCopyV()
             if (strcmp(entry_source->d_name, entry_dest->d_name) == 0) //TODO: Zabezpieczyć porównanie pliku z katalogiem
             {
                 allowCopy = false;
-               if (isRegularFile(sourcePath))
-               {
-                   if (ModificationTime(sourcePath) > ModificationTime(destPath)) //zamienic na cos innego jesli rekurencja nie bedzie dzialala
-                   {
-                       //skopiuj plik z  source do dest
-                       if (FileSize(sourcePath) < fileSizeThreshold) {
-                           syslog(LOG_NOTICE, "COPY NORMAL\n");
-                           CopyFileNormal(sourcePath, destPath);
-                       }
-                       else {
-                           syslog(LOG_NOTICE, "COPY MMAP\n");
-                           CopyFileMmap(sourcePath, destPath);
-                       }
-                   }
-               }
+
+                if(isRegularFile(sourcePath))
+                {
+                    srcModTime = ModificationTime(sourcePath);
+                    dstModTime = ModificationTime(destPath);
+                    if(srcModTime>dstModTime)
+                    {
+                        if (FileSize(sourcePath) < fileSizeThreshold) {
+                            CopyFileNormal(sourcePath, destPath);
+                        } else {
+                            CopyFileMmap(sourcePath, destPath);
+                        }
+                    }
+                }
                 free(destPath);
                 break;
             }
             free(destPath);
         }
-        destPath = AddFileNameToDirPath(dest, entry_source->d_name);
+        free(entry_dest);
 
+        destPath = AddFileNameToDirPath(dest, entry_source->d_name);
         if(allowCopy)
         {
             if (FileSize(sourcePath) < fileSizeThreshold) {
-                syslog(LOG_NOTICE, "COPY NORMAL\n");
                 CopyFileNormal(sourcePath, destPath);
-            }
-            else {
-                syslog(LOG_NOTICE, "COPY MMAP\n");
+            } else {
                 CopyFileMmap(sourcePath, destPath);
             }
         }
@@ -561,8 +567,68 @@ void SyncCopyV()
     }
 
     closedir(dir_dest);
-}
+    free(entry_source);
 
+}
+bool SyncCopyXD()
+{
+    struct dirent *filesListing;
+    DIR *srcDir = opendir(source);
+    DIR *dstDir = opendir(dest);
+    char *srcPath, *dstPath;
+
+    if(srcDir == NULL)
+    {
+        syslog(LOG_ERR, "Error opening directory: %s", source);
+        return false;
+    }
+    else if(dstDir == NULL)
+    {
+        syslog(LOG_ERR, "Error opening directory: %s", dest);
+        return false;
+    }
+
+    while((filesListing = readdir(srcDir)) != NULL)
+    {
+        if(strcmp(filesListing->d_name, ".") == 0 || strcmp(filesListing->d_name, "..") == 0)
+        {
+            continue;
+        }
+        srcPath = AddFileNameToDirPath(source, filesListing->d_name);
+        dstPath = AddFileNameToDirPath(dest, filesListing->d_name);
+        time_t srcModTime;
+        time_t dstModTime;
+
+        if(isRegularFile(srcPath))
+        {
+            srcModTime = ModificationTime(srcPath);
+            dstModTime = ModificationTime(dstPath);
+            if(srcModTime>dstModTime)
+            {
+                if (FileSize(srcPath) < fileSizeThreshold) {
+                    CopyFileNormal(srcPath, dstPath);
+                } else {
+                    CopyFileMmap(srcPath, dstPath);
+                }
+            }
+        }
+//        else if(isDirectory(srcPath) && recursive)
+//        {
+//            if(stat(dstPath, &dstFileStat) == -1) //if dir is not avalible
+//            {
+//                mkdir(dstPath, srcFileStat.st_mode);
+//                syslog(LOG_INFO, "[ MKDIR] Folder: %s", dstPath);
+//            }
+//            syncFiles(srcPath, dstPath);
+//        }
+        free(srcPath);
+        free(dstPath);
+    }
+    closedir(dstDir);
+    closedir(srcDir);
+    free(filesListing);
+    return true;
+}
 
 int main(int argc, char **argv)
 {
