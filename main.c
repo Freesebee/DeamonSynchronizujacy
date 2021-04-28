@@ -72,15 +72,15 @@ char *AddFileNameToDirPath(char* DirPath,char* FileName)
     strcat(finalPath, FileName);
     return finalPath;
 }
-
-bool CompareFiles(char *sourcePath, char *destinationPath)
-{
-    if(destinationPath == sourcePath)
-    {
-        return true;
-    }
-    else return false;
-   }
+//do wywalenia
+//bool CompareFiles(char *sourcePath, char *destinationPath)
+//{
+//    if(destinationPath == sourcePath)
+//    {
+//        return true;
+//    }
+//    else return false;
+//   }
 
 time_t ModificationTime(char *path)
 {
@@ -100,6 +100,15 @@ off_t FileSize(char *path) //jesli nie bedzie dzialalo to zmienic typ na _off_t
     off_t size = pathStat.st_size;
     return size;
 }
+mode_t DirectoryMode(char *path)
+{
+    struct stat pathStat;
+    if (stat(path, &pathStat) != 0) //success = 0
+        return 0;
+    mode_t mode = pathStat.st_mode;
+    return mode;
+}
+
 // Kopiowanie pliku z katalogu 1 do katalogu 2
 int CopyFileNormal(char *sourcePath, char *destinationPath)
 {
@@ -371,7 +380,7 @@ void InitializeDaemon()
     //TODO: @DevToxxy wytłumacz @FreeseBee do czego to służy
 }
 
-void SyncCopy()
+void SyncCopy(char *sourceA, char *destA)
 {
     bool allowCopy;
     DIR *dir_dest, *dir_source;
@@ -379,7 +388,7 @@ void SyncCopy()
     char *sourcePath, *destPath;
     time_t srcModTime;
     time_t dstModTime;
-    dir_source = opendir(source);
+    dir_source = opendir(sourceA);
 
     if (dir_source == NULL)
     {
@@ -389,8 +398,8 @@ void SyncCopy()
 
     while ((entry_source = readdir(dir_source)) != NULL)
     {
-        sourcePath = AddFileNameToDirPath(source, entry_source->d_name);
-        destPath = AddFileNameToDirPath(dest, entry_source->d_name);
+        sourcePath = AddFileNameToDirPath(sourceA, entry_source->d_name);
+        destPath = AddFileNameToDirPath(destA, entry_source->d_name);
 
         //pomijanie twardych dowiązań do obecnego i nadrzędnego katalogu
         if ((strcmp(entry_source->d_name, ".") == 0 || strcmp(entry_source->d_name, "..") == 0)
@@ -401,7 +410,7 @@ void SyncCopy()
             continue;
         }
 
-        dir_dest = opendir(dest);
+        dir_dest = opendir(destA);
 
         if (dir_dest == NULL)
         {
@@ -416,27 +425,41 @@ void SyncCopy()
             if (strcmp(entry_dest->d_name, ".") == 0 || strcmp(entry_dest->d_name, "..") == 0)
                 continue;
 
-            //syslog(LOG_NOTICE, "CHECKING: %s WITH %s\n",entry_source->d_name,entry_dest->d_name); //TODO WYWAL
 
             srcModTime = ModificationTime(sourcePath);
             dstModTime = ModificationTime(destPath);
 
             if (strcmp(entry_source->d_name,entry_dest->d_name) == 0 && srcModTime < dstModTime)
-                //TODO: && isRegularFile(sourcePath)) //zamienic na cos innego jesli rekurencja nie bedzie dzialala
-            {
-                //syslog(LOG_NOTICE, "FOUND EQUIVALENT WITH ACTUAL MODIFICATION DATE: %s\n",destPath); //TODO WYWAL
-                allowCopy = false;
-                break;
+            {//TODO: && isRegularFile(sourcePath)) //zamienic na cos innego jesli rekurencja nie bedzie dzialala
+                if (isRegularFile(sourcePath))
+                {
+                    allowCopy = false;
+                    break;
+                }
+                else if (isDirectory(sourcePath) && allowRecursion)
+                {
+                    mkdir(destPath, DirectoryMode(sourcePath));
+                    SyncCopy(sourcePath,destPath);
+                }
             }
         }
 
         if(allowCopy)
         {
-            if (FileSize(sourcePath) < fileSizeThreshold) {
-                CopyFileNormal(sourcePath, destPath);
-            } else {
-                CopyFileMmap(sourcePath, destPath);
+            if (isRegularFile(sourcePath))
+            {
+                if (FileSize(sourcePath) < fileSizeThreshold) {
+                    CopyFileNormal(sourcePath, destPath);
+                } else {
+                    CopyFileMmap(sourcePath, destPath);
+                }
             }
+            else if (isDirectory(sourcePath) && allowRecursion)
+            {
+                mkdir(destPath, DirectoryMode(sourcePath));
+                SyncCopy(sourcePath,destPath);
+            }
+
         }
 
         closedir(dir_dest);
@@ -543,90 +566,6 @@ void SyncDelete()
     closedir(dir_dest);
 }
 
-// V2
-void SyncCopyV()
-{
-    DIR *dir_dest, *dir_source;
-    struct dirent *entry_dest, *entry_source;
-    char *sourcePath, *destPath;
-    time_t srcModTime;
-    time_t dstModTime;
-    bool allowCopy = true;
-
-    dir_source = opendir(source);
-
-    if (dir_source == NULL) {
-        syslog(LOG_ERR, "COPY:OPENDIR(SOURCE) RETURNED WITH ERROR:%d\n", errno);
-        exit(EXIT_FAILURE);
-    }
-
-    while ((entry_source = readdir(dir_source)) != NULL)
-    {
-        allowCopy = true;
-
-        if (strcmp(entry_source->d_name, ".") == 0 || strcmp(entry_source->d_name, "..") == 0)
-            continue;
-
-        dir_dest = opendir(dest);
-
-        if (dir_dest == NULL) {
-            syslog(LOG_ERR, "COPY:OPENDIR(DEST) RETURNED WITH ERROR:%d\n", errno);
-            exit(EXIT_FAILURE);
-        }
-        sourcePath = AddFileNameToDirPath(source, entry_source->d_name);
-
-        while ((entry_dest = readdir(dir_dest)) != NULL)
-        {
-            if (strcmp(entry_dest->d_name, ".") == 0 || strcmp(entry_dest->d_name, "..") == 0)
-                continue;
-
-            destPath = AddFileNameToDirPath(dest, entry_dest->d_name);
-
-            if (strcmp(entry_source->d_name, entry_dest->d_name) == 0) //TODO: Zabezpieczyć porównanie pliku z katalogiem
-            {
-                allowCopy = false;
-
-                if(isRegularFile(sourcePath))
-                {
-                    srcModTime = ModificationTime(sourcePath);
-                    dstModTime = ModificationTime(destPath);
-                    if(srcModTime>dstModTime)
-                    {
-                        if (FileSize(sourcePath) < fileSizeThreshold) {
-                            CopyFileNormal(sourcePath, destPath);
-                        } else {
-                            CopyFileMmap(sourcePath, destPath);
-                        }
-                    }
-                }
-                free(destPath);
-                break;
-            }
-            free(destPath);
-        }
-        free(entry_dest);
-
-        destPath = AddFileNameToDirPath(dest, entry_source->d_name);
-        if(allowCopy)
-        {
-            if(isRegularFile(sourcePath))
-            {
-                if (FileSize(sourcePath) < fileSizeThreshold) {
-                    CopyFileNormal(sourcePath, destPath);
-                } else {
-                    CopyFileMmap(sourcePath, destPath);
-                }
-            }
-        }
-        closedir(dir_dest);
-        free(sourcePath);
-        free(destPath);
-    }
-
-    closedir(dir_source);
-    free(entry_source);
-
-}
 bool SyncCopyXD()
 {
     struct dirent *filesListing;
@@ -714,7 +653,7 @@ int main(int argc, char **argv)
     CheckPaths();
 
     //SyncDelete();
-    SyncCopy();
+    SyncCopy(source,dest);
 
     syslog(LOG_NOTICE, "<<<<<<<<<<<<<<<< DAEMON EXORCUMCISED\n");
     closelog();
