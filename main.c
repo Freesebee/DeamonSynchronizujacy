@@ -43,7 +43,7 @@ int sleepTime = DEFAULT_SLEEP_TIME; //[Parametr: -st]
 // zamykanie logu jest opcjonalne
 //closelog();
 
-// Sprawdza czy plik o podane sj  sciezce jest katalogiem
+// Sprawdza czy plik o podanej sciezce jest katalogiem
 int isDirectory(const char *path) {
     struct stat statbuffer;
     if (stat(path, &statbuffer) != 0) //success = 0
@@ -58,11 +58,11 @@ int isRegularFile(const char *path) {
         return 0;
     return S_ISREG(statbuffer.st_mode); //0 jesli NIE jest plikiem
 }
-
+//Dodaje nazwe pliku do sciezki
 char *AddFileNameToDirPath(char* DirPath,char* FileName)
 {
-    char *finalPath = malloc(sizeof(char) * (BUFFER_SIZE));
-    if(finalPath==NULL)
+    char *finalPath = malloc(sizeof(char) * 4096 ); //max dlugosc sciezki w linuxie to 4096 znakow
+    if(finalPath==NULL) //jesli malloc nie zadziala
     {
         syslog(LOG_ERR, "memory allocation error \n errno = %d", errno);
         exit(EXIT_FAILURE);
@@ -72,16 +72,7 @@ char *AddFileNameToDirPath(char* DirPath,char* FileName)
     strcat(finalPath, FileName);
     return finalPath;
 }
-//do wywalenia
-//bool CompareFiles(char *sourcePath, char *destinationPath)
-//{
-//    if(destinationPath == sourcePath)
-//    {
-//        return true;
-//    }
-//    else return false;
-//   }
-
+//czas modyfikacji danego pliku
 time_t ModificationTime(char *path)
 {
 
@@ -91,8 +82,8 @@ time_t ModificationTime(char *path)
     time_t time = pathStat.st_ctime;
     return time;
 }
-
-off_t FileSize(char *path) //jesli nie bedzie dzialalo to zmienic typ na _off_t
+//rozmiar danego pliku
+off_t FileSize(char *path)
 {
     struct stat pathStat;
     if (stat(path, &pathStat) != 0) //success = 0
@@ -100,6 +91,7 @@ off_t FileSize(char *path) //jesli nie bedzie dzialalo to zmienic typ na _off_t
     off_t size = pathStat.st_size;
     return size;
 }
+//Tryb danego katalogu np 0777
 mode_t DirectoryMode(char *path)
 {
     struct stat pathStat;
@@ -109,14 +101,14 @@ mode_t DirectoryMode(char *path)
     return mode;
 }
 
-// Kopiowanie pliku z katalogu 1 do katalogu 2
+// Kopiowanie pliku z katalogu 1 do katalogu 2 za pomoca read/write
 int CopyFileNormal(char *sourcePath, char *destinationPath)
 {
     int copyFromFile = open(sourcePath, O_RDONLY);
     int copyToFile = open(destinationPath, O_WRONLY | O_CREAT | O_TRUNC, EPERM);
     char *buffer = malloc(sizeof(char) * BUFFER_SIZE);
 
-    if (buffer == NULL) {
+    if (buffer == NULL) { //jesli malloc nie zadziala
         syslog(LOG_ERR, "COPY[read/write]:MEMORY ALLOCATION ERROR");
         close(copyFromFile);
         close(copyToFile);
@@ -196,6 +188,7 @@ void DeleteEntry(char *relativePath)
     }
 }
 
+// Kopiowanie pliku z katalogu 1 do katalogu 2 za pomoca mmap/write
 int CopyFileMmap(char *sourcePath, char *destinationPath)
 {
     int copyFromFile = open(sourcePath, O_RDONLY);
@@ -377,7 +370,6 @@ void InitializeDaemon()
     open("/dev/null", O_RDWR); /* stdin */
     dup(0); /* stdout */
     dup(0); /* stderror */
-    //TODO: @DevToxxy wytłumacz @FreeseBee do czego to służy
 }
 
 void SyncCopy(char *sourceA, char *destA)
@@ -405,7 +397,6 @@ void SyncCopy(char *sourceA, char *destA)
         if ((strcmp(entry_source->d_name, ".") == 0 || strcmp(entry_source->d_name, "..") == 0)
             || (!allowRecursion && isDirectory(sourcePath)))
         {
-            //syslog(LOG_NOTICE, "COPY:SKIPPING:%s",sourcePath); //TODO: WYWAL
             free(sourcePath);
             continue;
         }
@@ -428,7 +419,7 @@ void SyncCopy(char *sourceA, char *destA)
 
             srcModTime = ModificationTime(sourcePath);
             dstModTime = ModificationTime(destPath);
-
+            //sprawdzanie czy w katalogu docelowym jest taki sam plik/katalog jak w katalogu zrodlowym
             if (strcmp(entry_source->d_name,entry_dest->d_name) == 0 && srcModTime < dstModTime)
             {
                 if (isRegularFile(sourcePath))
@@ -438,12 +429,14 @@ void SyncCopy(char *sourceA, char *destA)
                 }
                 else if (isDirectory(sourcePath) && allowRecursion)
                 {
-                    mkdir(destPath, DirectoryMode(sourcePath));
+                   int createSuccess = mkdir(destPath, DirectoryMode(sourcePath));
+                    if(createSuccess == 0)
+                        syslog(LOG_NOTICE, "CREATED DIRECTORY: %s",destPath);
                     SyncCopy(sourcePath,destPath);
                 }
             }
         }
-
+        //jesli w katalogu docelowym nie ma takiego samego pliku/katalogu jak w katalogu zrodlowym
         if(allowCopy)
         {
             if (isRegularFile(sourcePath))
@@ -456,7 +449,9 @@ void SyncCopy(char *sourceA, char *destA)
             }
             else if (isDirectory(sourcePath) && allowRecursion)
             {
-                mkdir(destPath, DirectoryMode(sourcePath));
+                int createSuccess = mkdir(destPath, DirectoryMode(sourcePath));
+                if(createSuccess == 0)
+                    syslog(LOG_NOTICE, "CREATED DIRECTORY: %s",destPath);
                 SyncCopy(sourcePath,destPath);
             }
 
@@ -566,65 +561,6 @@ void SyncDelete()
     closedir(dir_dest);
 }
 
-bool SyncCopyXD()
-{
-    struct dirent *filesListing;
-    DIR *srcDir = opendir(source);
-    DIR *dstDir = opendir(dest);
-    char *srcPath, *dstPath;
-
-    if(srcDir == NULL)
-    {
-        syslog(LOG_ERR, "Error opening directory: %s", source);
-        return false;
-    }
-    else if(dstDir == NULL)
-    {
-        syslog(LOG_ERR, "Error opening directory: %s", dest);
-        return false;
-    }
-
-    while((filesListing = readdir(srcDir)) != NULL)
-    {
-        if(strcmp(filesListing->d_name, ".") == 0 || strcmp(filesListing->d_name, "..") == 0)
-        {
-            continue;
-        }
-        srcPath = AddFileNameToDirPath(source, filesListing->d_name);
-        dstPath = AddFileNameToDirPath(dest, filesListing->d_name);
-        time_t srcModTime;
-        time_t dstModTime;
-
-        if(isRegularFile(srcPath))
-        {
-            srcModTime = ModificationTime(srcPath);
-            dstModTime = ModificationTime(dstPath);
-            if(srcModTime>dstModTime)
-            {
-                if (FileSize(srcPath) < fileSizeThreshold) {
-                    CopyFileNormal(srcPath, dstPath);
-                } else {
-                    CopyFileMmap(srcPath, dstPath);
-                }
-            }
-        }
-//        else if(isDirectory(srcPath) && recursive)
-//        {
-//            if(stat(dstPath, &dstFileStat) == -1) //if dir is not avalible
-//            {
-//                mkdir(dstPath, srcFileStat.st_mode);
-//                syslog(LOG_INFO, "[ MKDIR] Folder: %s", dstPath);
-//            }
-//            syncFiles(srcPath, dstPath);
-//        }
-        free(srcPath);
-        free(dstPath);
-    }
-    closedir(dstDir);
-    closedir(srcDir);
-    free(filesListing);
-    return true;
-}
 
 int main(int argc, char **argv)
 {
