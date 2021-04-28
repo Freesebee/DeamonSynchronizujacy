@@ -396,7 +396,7 @@ void SyncCopy()
             syslog(LOG_ERR, "Destination path error:%d\n", errno);
             exit(EXIT_FAILURE);
         }
-
+//s
         while ((entry_dest = readdir(dir_dest)) != NULL){
             if (strcmp(entry_dest->d_name, ".") == 0 || strcmp(entry_dest->d_name, "..") == 0)
                 continue;
