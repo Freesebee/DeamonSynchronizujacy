@@ -23,4 +23,7 @@ TODO: [12p.] W zależności  od rozmiaru plików dla małych plików wykonywane 
  a w przypadku dużych przy pomocy mmap/write (plik źródłowy) zostaje zamapowany w całości w pamięci.
  Próg dzielący pliki małe od dużych  może być przekazywany jako opcjonalny argument.
 
-Uwagi: (a) Wszelkie operacje na plikach należy wykonywać przy pomocy API Linuksa a nie standardowej biblioteki języka C (b)  kopiowanie za każdym obudzeniem całego drzewa katalogów zostanie potraktowane jako poważny błąd (c) podobnie jak przerzucenie części zadań na shell systemowy (funkcja system).
+Uwagi:
+(a) Wszelkie operacje na plikach należy wykonywać przy pomocy API Linuksa a nie standardowej biblioteki języka C
+(b) kopiowanie za każdym obudzeniem całego drzewa katalogów zostanie potraktowane jako poważny błąd
+(c) podobnie jak przerzucenie części zadań na shell systemowy (funkcja system).
