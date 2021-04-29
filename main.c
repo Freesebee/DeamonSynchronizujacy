@@ -465,95 +465,73 @@ void SyncCopy(char *sourceA, char *destA)
     closedir(dir_source);
 }
 
-void SyncDelete()
+void SyncDelete(char *sourceDirPath, char *destDirPath)
 {
     DIR *dir_dest, *dir_source;
-    struct dirent *entry_dest, *entry_source;
-    char *sourcePath, *destPath;
+    struct dirent *entryDest, *entrySource;
+    char *sourceEntryPath, *destEntryPath;
 
-    bool allowDelete = true;
+    bool allowDelete;
 
-//    WHILE(SA PLIKI W DEST)
-//    {
-//        WHILE(SA PLIKI W SOURCE)
-//        {
-//            ZNAJDZ ODPOWIEDNIK
-//        }
-//
-//        JEZELI BRAK ODPOWIEDNIKA TO USUN
-//    }
-//
-//    WHILE(SOURCE ZAWIERA PODKATALOGI)
-//    {
-//        if(SOURCE I DEST MAJĄ TEN SAM PODKATALOG)
-//        {
-//            WEJDZ DO PODKATALOGU SOURCE
-//            WEJDZ DO PODKATALOGU DEST
-//
-//            WHILE(SA PLIKI W DEST)
-//            {
-//                WHILE(SA PLIKI W SOURCE)
-//                {
-//                    ZNAJDZ ODPOWIEDNIK
-//                }
-//
-//                JEZELI BRAK ODPOWIEDNIKA TO USUN
-//            }
-//        }
-//    }
-
-    dir_dest = opendir(dest);
+    dir_dest = opendir(destDirPath);
 
     if (dir_dest == NULL) {
         syslog(LOG_ERR, "DELETE:OPENDIR(SOURCE) RETURNED WITH ERROR:%d\n", errno);
         exit(EXIT_FAILURE);
     }
 
-    while ((entry_dest = readdir(dir_dest)) != NULL)
+    while ((entryDest = readdir(dir_dest)) != NULL)
     {
         allowDelete = true;
 
-        destPath = AddFileNameToDirPath(dest, entry_dest->d_name);
+        destEntryPath = AddFileNameToDirPath(dest, entryDest->d_name);
 
         //pomijanie twardych dowiązań do obecnego i nadrzędnego katalogu
-        if ((strcmp(entry_dest->d_name, ".") == 0 || strcmp(entry_dest->d_name, "..") == 0)
-            || !allowRecursion && isDirectory(AddFileNameToDirPath(dest, entry_dest->d_name)))
+        if ((strcmp(entryDest->d_name, ".") == 0 || strcmp(entryDest->d_name, "..") == 0)
+            || (allowRecursion == false && isRegularFile(destEntryPath) == 0)) //jeżeli nie jest plikiem
         {
-            //syslog(LOG_NOTICE, "DELETE:SKIPPING: %s\n", destPath); //TODO: WYWAL
-            free(destPath);
+            free(destEntryPath);
             continue;
         }
 
-        dir_source = opendir(source);
+        dir_source = opendir(sourceDirPath);
 
         if (dir_source == NULL) {
             syslog(LOG_ERR, "DELETE:OPENDIR(DEST) RETURNED WITH ERROR:%d\n", errno);
             exit(EXIT_FAILURE);
         }
 
-        while ((entry_source = readdir(dir_source)) != NULL)
+        while ((entrySource = readdir(dir_source)) != NULL)
         {
-            if (strcmp(entry_source->d_name, ".") == 0 || strcmp(entry_source->d_name, "..") == 0)
+            if (strcmp(entrySource->d_name, ".") == 0 || strcmp(entrySource->d_name, "..") == 0)
                 continue;
 
-            sourcePath = AddFileNameToDirPath(source, entry_source->d_name);
+            sourceEntryPath = AddFileNameToDirPath(source, entrySource->d_name);
 
-            //syslog(LOG_NOTICE, "CHECKING: %s WITH %s\n",entry_dest->d_name,entry_source->d_name); //TODO: WYWAL
-
-            if (strcmp(entry_source->d_name, entry_dest->d_name) == 0) //TODO: Zabezpiecz jezeli source nie jest plikiem/katalogiem
+            if (strcmp(entrySource->d_name, entryDest->d_name) == 0)
             {
-                allowDelete = false;
+                if (isDirectory(destEntryPath) != 0 && isDirectory(sourceEntryPath) != 0) //teraz allowRecursion=true
+                {
+                    allowDelete = false;
+
+                    SyncDelete(sourceEntryPath, destEntryPath); //wejscie do podkatalogu
+                }
+                else if(isRegularFile(destEntryPath) != 0 && isRegularFile(sourceEntryPath) != 0)
+                {
+                    allowDelete = false;
+                }
+
                 break;
             }
         }
 
         if(allowDelete)
         {
-            DeleteEntry(destPath);
+            DeleteEntry(destEntryPath);
         }
 
-        free(sourcePath);
-        free(destPath);
+        free(sourceEntryPath);
+        free(destEntryPath);
 
         closedir(dir_source);
     }
@@ -588,8 +566,8 @@ int main(int argc, char **argv)
     //Sprawdź czy po pobudce katalogi istnieją
     CheckPaths();
 
-    //SyncDelete();
-    SyncCopy(source,dest);
+    SyncDelete(source, dest);
+    SyncCopy(source, dest);
 
     syslog(LOG_NOTICE, "<<<<<<<<<<<<<<<< DAEMON EXORCUMCISED\n");
     closelog();
