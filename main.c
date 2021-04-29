@@ -554,28 +554,25 @@ void SyncDelete(char *sourceDirPath, char *destDirPath)
 
 int main(int argc, char **argv)
 {
-    InitializeParameters(argc, argv);
+    InitializeParameters(argc, argv); // Inicjalizacja parametrów daemona
 
-    InitializeDaemon();
+    InitializeDaemon(); // Utworzenie daemona
 
-//    Umożliwienie budzenia daemona sygnałem SIGUSR1
-//    /bin/kill -s SIGUSR1 PID aby obudzić
-    signal(SIGUSR1, WakeUp);
+    signal(SIGUSR1, WakeUp); // Umożliwienie budzenia daemona sygnałem SIGUSR1
 
-//    Otworzenie pliku z logami
-//    cat /var/log/syslog | grep -i SYNCHRONIZER
     openlog("SYNCHRONIZER", LOG_PID, LOG_DAEMON);
-    syslog(LOG_NOTICE, ">>>>>>>>>>>>>>>>>>>> DAEMON SUMMONED\n");
+    syslog(LOG_NOTICE, ">>>>>>>>>>>>>>>>>>>> DAEMON SUMMONED\n"); // Otworzenie pliku z logami
 
-    GoToSleep();
+    GoToSleep(); // Usypianie daemona
 
-    CheckPaths();
+    CheckPaths(); // Weryfikacja istnienia ścieżek katalogów po obudzeniu daemona
 
-    SyncDelete(source, dest);
-    SyncCopy(source, dest);
+    SyncDelete(source, dest); // Usuwanie zawartości katalogu docelowego
+
+    SyncCopy(source, dest); // Kopiowanie zawartości katalogu źródłowego
 
     syslog(LOG_NOTICE, "<<<<<<<<<<<<<<<<<<<< DAEMON EXORCISED\n");
-    closelog();
+    closelog(); // Zamknięcie pliku z log'ami
 
-    exit(EXIT_SUCCESS);
+    exit(EXIT_SUCCESS); // Zakończenie pracy daemona
 }
