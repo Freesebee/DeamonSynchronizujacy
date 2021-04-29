@@ -157,7 +157,7 @@ int CopyFileMmap(char *sourcePath, char *destinationPath)
 
 }
 // Usuwanie pliku / katalogu
-void DeleteEntry(char *relativePath)
+int DeleteEntry(char *relativePath)
 {
     if (isDirectory(relativePath))
     {
@@ -173,45 +173,57 @@ void DeleteEntry(char *relativePath)
                 if(dir == NULL)
                 {
                     syslog(LOG_ERR, "ERROR WHILE OPENING DIR TO DELETE: %s\nerrno = %d\n", relativePath, errno);
-                    exit(EXIT_FAILURE);
+                    return 1; //exit(EXIT_FAILURE);
                 }
+
+                int dirWithLinks;
 
                 while((entry = readdir(dir)) != NULL)
                 {
                     if(strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
                         continue;
 
-                    DeleteEntry(AddFileNameToDirPath(relativePath, entry->d_name));
+                    dirWithLinks = DeleteEntry(AddFileNameToDirPath(relativePath, entry->d_name));
+                }
+
+                if (dirWithLinks)
+                {
+                    syslog(LOG_ERR, "CAN'T DELETE DIR-CONTAINS LINKS: %s", relativePath);
+                    return 1; // exit(EXIT_FAILURE);
                 }
 
                 if (unlinkat(AT_FDCWD, relativePath, AT_REMOVEDIR))
                 {
-                    syslog(LOG_ERR, "Error while deleting dir: %s\n errno = %d\n", relativePath, errno);
-                    exit(EXIT_FAILURE);
+                    syslog(LOG_ERR, "DIR DELETE ERROR:%d AT PATH: %s", errno, relativePath);
+                    return 1; // exit(EXIT_FAILURE);
                 }
             }
             else
             {
-                syslog(LOG_ERR, "Error while deleting dir: %s\n errno = %d\n", relativePath, errno);
-                exit(EXIT_FAILURE);
+                syslog(LOG_ERR, "DIR DELETE ERROR:%d AT PATH: %s", errno, relativePath);
+                return 1; //exit(EXIT_FAILURE);
             }
         }
 
         syslog(LOG_NOTICE, "DELETED DIRECTORY: %s\n", relativePath);
     }
-    else
+    else if(isRegularFile(relativePath))
     {
         if (unlink(relativePath))
         {
-            syslog(LOG_ERR, "Error while deleting file: %s\n errno = %d", relativePath, errno);
-            exit(EXIT_FAILURE);
+            syslog(LOG_ERR, "FILE DELETE ERROR:%d AT PATH: %s", errno, relativePath);
+            return 1; //exit(EXIT_FAILURE);
         }
 
         syslog(LOG_NOTICE, "DELETED FILE: %s\n", relativePath);
     }
+    else
+    {
+        return 1;
+    }
+
+    return 0; //poprawnie usunięto wpis
 }
-
-
 
 void WakeUp(int signal)
 {
@@ -254,6 +266,12 @@ void InitializeParameters(int argc, char **argv)
     }
     else {
         dest = realpath(argv[2], NULL);
+    }
+
+    if(strcmp(dest,source) == 0)
+    {
+        printf("Sciezka docelowa nie moze byc taka sama jak zrodlowa\n");
+        exit(EXIT_FAILURE);
     }
 
     int i;
