@@ -46,7 +46,7 @@ int sleepTime = DEFAULT_SLEEP_TIME; //[Parametr: -st]
 // Sprawdza czy plik o podanej sciezce jest katalogiem
 int isDirectory(const char *path) {
     struct stat statbuffer;
-    if (stat(path, &statbuffer) != 0) //poprawne zadzialanie f. = 0
+    if (lstat(path, &statbuffer) != 0) //poprawne zadzialanie f. = 0
         return 0;
     return S_ISDIR(statbuffer.st_mode); //0 jesli NIE jest katalogiem
 }
@@ -54,10 +54,11 @@ int isDirectory(const char *path) {
 // Sprawdza czy plik o podanej  sciezce jest plikiem
 int isRegularFile(const char *path) {
     struct stat statbuffer;
-    if (stat(path, &statbuffer) != 0) //poprawne zadzialanie f. = 0
+    if (lstat(path, &statbuffer) != 0) //poprawne zadzialanie f. = 0
         return 0;
     return S_ISREG(statbuffer.st_mode); //0 jesli NIE jest plikiem
 }
+
 //Dodaje nazwe pliku do sciezki
 char *AddFileNameToDirPath(char* DirPath,char* FileName)
 {
@@ -395,7 +396,7 @@ void SyncCopy(char *sourceA, char *destA)
 
         //pomijanie twardych dowiązań do obecnego i nadrzędnego katalogu
         if ((strcmp(entry_source->d_name, ".") == 0 || strcmp(entry_source->d_name, "..") == 0)
-            || (!allowRecursion && isDirectory(sourcePath)) || !(isRegularFile(sourcePath) || isDirectory(sourcePath)))
+            || (!allowRecursion && isDirectory(sourcePath)))
         {
             free(sourcePath);
             free(destPath);
