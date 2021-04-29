@@ -165,20 +165,12 @@ int DeleteEntry(char *relativePath)
                     return 1; //exit(EXIT_FAILURE);
                 }
 
-                int dirWithLinks;
-
                 while((entry = readdir(dir)) != NULL)
                 {
                     if(strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
                         continue;
 
-                    dirWithLinks = DeleteEntry(AddFileNameToDirPath(relativePath, entry->d_name));
-                }
-
-                if (dirWithLinks)
-                {
-                    syslog(LOG_ERR, "CAN'T DELETE DIR-CONTAINS LINKS: %s", relativePath);
-                    return 1; // exit(EXIT_FAILURE);
+                    DeleteEntry(AddFileNameToDirPath(relativePath, entry->d_name));
                 }
 
                 if (unlinkat(AT_FDCWD, relativePath, AT_REMOVEDIR))
@@ -196,7 +188,7 @@ int DeleteEntry(char *relativePath)
 
         syslog(LOG_NOTICE, "DELETED DIRECTORY: %s\n", relativePath);
     }
-    else if(isRegularFile(relativePath))
+    else
     {
         if (unlink(relativePath))
         {
@@ -205,10 +197,6 @@ int DeleteEntry(char *relativePath)
         }
 
         syslog(LOG_NOTICE, "DELETED FILE: %s\n", relativePath);
-    }
-    else
-    {
-        return 1;
     }
 
     return 0; //poprawnie usunięto wpis
@@ -498,7 +486,8 @@ void SyncDelete(char *sourceDirPath, char *destDirPath)
 
         //pomijanie twardych dowiązań do obecnego i nadrzędnego katalogu
         if ((strcmp(entryDest->d_name, ".") == 0 || strcmp(entryDest->d_name, "..") == 0)
-            || (allowRecursion == false && isRegularFile(destEntryPath) == 0)) //jeżeli nie jest plikiem
+            || (allowRecursion == false && isDirectory(destEntryPath)) //jeżeli jest katalogiem
+            || (isRegularFile(destEntryPath) == 0 && isDirectory(destEntryPath) == 0)) //nie jest ani katalogiem ani plikiem
         {
             free(destEntryPath);
             continue;
@@ -533,6 +522,8 @@ void SyncDelete(char *sourceDirPath, char *destDirPath)
 
                 break;
             }
+
+            free(sourceEntryPath);
         }
 
         if(allowDelete)
@@ -540,7 +531,6 @@ void SyncDelete(char *sourceDirPath, char *destDirPath)
             DeleteEntry(destEntryPath);
         }
 
-        free(sourceEntryPath);
         free(destEntryPath);
 
         closedir(dir_source);
