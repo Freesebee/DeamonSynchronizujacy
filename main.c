@@ -395,9 +395,10 @@ void SyncCopy(char *sourceA, char *destA)
 
         //pomijanie twardych dowiązań do obecnego i nadrzędnego katalogu
         if ((strcmp(entry_source->d_name, ".") == 0 || strcmp(entry_source->d_name, "..") == 0)
-            || (!allowRecursion && isDirectory(sourcePath)))
+            || (!allowRecursion && isDirectory(sourcePath)) || !(isRegularFile(sourcePath) || isDirectory(sourcePath)))
         {
             free(sourcePath);
+            free(destPath);
             continue;
         }
 
