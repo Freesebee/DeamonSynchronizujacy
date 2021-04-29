@@ -132,7 +132,29 @@ int CopyFileNormal(char *sourcePath, char *destinationPath)
     free(buffer);
 
 }
+// Kopiowanie pliku z katalogu 1 do katalogu 2 za pomoca mmap/write
+int CopyFileMmap(char *sourcePath, char *destinationPath)
+{
+    int copyFromFile = open(sourcePath, O_RDONLY);
+    int copyToFile = open(destinationPath, O_WRONLY | O_CREAT | O_TRUNC, EPERM);
+    struct stat pathStat;
+    stat(sourcePath,&pathStat);
+    char *mappedFile = mmap(NULL,pathStat.st_size, PROT_READ, MAP_SHARED,copyFromFile,0);
+    if (mappedFile == NULL)
+    {
+        return(-1);
+    }
+    ssize_t bytesWritten = write(copyToFile, mappedFile, pathStat.st_size);
+    if (bytesWritten != pathStat.st_size)
+    {
+        syslog(LOG_ERR, "ERROR READING FILE: %s OR WRITING TO: %s",sourcePath,destinationPath);
+        return(-1);
+    }
+    syslog(LOG_NOTICE, "COPYING [mmap] %s TO %s",sourcePath,destinationPath);
+    close(copyFromFile);
+    close(copyToFile);
 
+}
 // Usuwanie pliku / katalogu
 void DeleteEntry(char *relativePath)
 {
@@ -188,29 +210,7 @@ void DeleteEntry(char *relativePath)
     }
 }
 
-// Kopiowanie pliku z katalogu 1 do katalogu 2 za pomoca mmap/write
-int CopyFileMmap(char *sourcePath, char *destinationPath)
-{
-    int copyFromFile = open(sourcePath, O_RDONLY);
-    int copyToFile = open(destinationPath, O_WRONLY | O_CREAT | O_TRUNC, EPERM);
-    struct stat pathStat;
-    stat(sourcePath,&pathStat);
-    char *mappedFile = mmap(NULL,pathStat.st_size, PROT_READ, MAP_SHARED,copyFromFile,0);
-    if (mappedFile == NULL)
-    {
-        return(-1);
-    }
-    ssize_t bytesWritten = write(copyToFile, mappedFile, pathStat.st_size);
-    if (bytesWritten != pathStat.st_size)
-    {
-        syslog(LOG_ERR, "ERROR READING FILE: %s OR WRITING TO: %s",sourcePath,destinationPath);
-        return(-1);
-    }
-    syslog(LOG_NOTICE, "COPYING [mmap] %s TO %s",sourcePath,destinationPath);
-    close(copyFromFile);
-    close(copyToFile);
 
-}
 
 void WakeUp(int signal)
 {
@@ -330,7 +330,7 @@ void CheckPaths()
 
 void InitializeDaemon()
 {
-    /* Stworzenie nowego procesu */
+    //Stworzenie nowego procesu
     pid_t pid = fork();
     switch (pid) {
         case -1:
@@ -346,30 +346,30 @@ void InitializeDaemon()
             break;
     }
 
-    /* Zmiana praw dostępu do plików za pomocą maski użytkownika */
+    //Zmiana praw dostępu do plików za pomocą maski użytkownika
     umask(0);
 
-    /* Stworzenie nowej sesji i grupy procesów */
+    //Stworzenie nowej sesji i grupy procesów
     if (setsid() < 0) {
         printf("Nie przypisano id sesji\n");
         exit(EXIT_FAILURE);
     }
 
-    /* Ustaw katalog roboczy na katalog główny (root) */
+    //Ustaw katalog roboczy na katalog główny (root)
     if (chdir("/")) {
         printf("Nie udało się ustawić katalogu roboczego na katalog główny\n");
         exit(EXIT_FAILURE);
     }
 
-    /* Zamknięcie standardowych deksryptorów plików */
+    //Zamknięcie standardowych deksryptorów plików
     close(STDIN_FILENO);
     close(STDOUT_FILENO);
     close(STDERR_FILENO);
 
-    /* przeadresuj deskryptory plików 0, 1, 2 na /dev/null */
-    open("/dev/null", O_RDWR); /* stdin */
-    dup(0); /* stdout */
-    dup(0); /* stderror */
+    //przeadresuj deskryptory plików 0, 1, 2 na /dev/null
+    open("/dev/null", O_RDWR); // stdin
+    dup(0);  //stdout
+    dup(0); //stderror
 }
 
 void SyncCopy(char *sourceA, char *destA)
@@ -543,12 +543,6 @@ void SyncDelete(char *sourceDirPath, char *destDirPath)
 
 int main(int argc, char **argv)
 {
-
-//    Sprawdzenie poprawności parametrów
-//    oraz inicjalizacja zmiennych globalnych:
-//    - int sleepTime; // czas snu Daemona
-//    - char* source, dest; // Ścieżki do plików/katalogów źródłowego i docelowego
-//    - bool allowRecursion; // Tryb umożliwiający rekurencyjną synchronizację
     InitializeParameters(argc, argv);
 
     InitializeDaemon();
@@ -564,13 +558,12 @@ int main(int argc, char **argv)
 
     GoToSleep();
 
-    //Sprawdź czy po pobudce katalogi istnieją
     CheckPaths();
 
     SyncDelete(source, dest);
     SyncCopy(source, dest);
 
-    syslog(LOG_NOTICE, "<<<<<<<<<<<<<<<< DAEMON EXORCUMCISED\n");
+    syslog(LOG_NOTICE, "<<<<<<<<<<<<<<<<<<<< DAEMON EXORCISED\n");
     closelog();
 
     exit(EXIT_SUCCESS);
