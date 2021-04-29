@@ -32,17 +32,6 @@ int fileSizeThreshold = DEFAULT_FILE_SIZE_THRESHOLD; //[Parametr: -fs]
 int sleepTime = DEFAULT_SLEEP_TIME; //[Parametr: -st]
 // czas snu Daemona
 
-// otwiera logi, pierwszy argument jest dodawany na poczatek kazdego logu
-// drugi to specjalne opcje, mozna wrzucic kilka za pomoca |
-// trzeci wskazuje jaki typ programu loguje wiadomosci
-//openlog("DAEMON:",LOG_PID, LOG_LOCAL1);
-
-// wpisuje do logow, pierwszy argument okresla importance logu, drugi to wpisywany tekst
-//syslog(LOG_NOTICE, "cokolwiek")
-
-// zamykanie logu jest opcjonalne
-//closelog();
-
 // Sprawdza czy plik o podanej sciezce jest katalogiem
 int isDirectory(const char *path) {
     struct stat statbuffer;
