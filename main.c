@@ -9,15 +9,15 @@
 #include <unistd.h>
 #include <linux/fs.h>
 #include <ctype.h>
-#include <syslog.h> //biblioteka do logow
+#include <syslog.h>
 #include <stdbool.h>
 #include <signal.h>
 #include <limits.h>
 #include <string.h>
 #include <sys/mman.h>
 
-#define DEFAULT_FILE_SIZE_THRESHOLD 1048576 // domyślny próg rozmiaru plików do kopiowania
-#define BUFFER_SIZE 2048 //2 KB
+#define DEFAULT_FILE_SIZE_THRESHOLD 1048576 // domyślny próg rozmiaru plików do kopiowania (1MB)
+#define BUFFER_SIZE 2048 //domyślny rozmiar bufora(2 KB)
 #define DEFAULT_SLEEP_TIME 300 // domyślny czas snu (5 min)
 
 char *source; // ścieżka do katalogu źródłowego
@@ -46,7 +46,7 @@ int sleepTime = DEFAULT_SLEEP_TIME; //[Parametr: -st]
 // Sprawdza czy plik o podanej sciezce jest katalogiem
 int isDirectory(const char *path) {
     struct stat statbuffer;
-    if (stat(path, &statbuffer) != 0) //success = 0
+    if (stat(path, &statbuffer) != 0) //poprawne zadzialanie f. = 0
         return 0;
     return S_ISDIR(statbuffer.st_mode); //0 jesli NIE jest katalogiem
 }
@@ -54,7 +54,7 @@ int isDirectory(const char *path) {
 // Sprawdza czy plik o podanej  sciezce jest plikiem
 int isRegularFile(const char *path) {
     struct stat statbuffer;
-    if (stat(path, &statbuffer) != 0) //success = 0
+    if (stat(path, &statbuffer) != 0) //poprawne zadzialanie f. = 0
         return 0;
     return S_ISREG(statbuffer.st_mode); //0 jesli NIE jest plikiem
 }
@@ -77,7 +77,7 @@ time_t ModificationTime(char *path)
 {
 
     struct stat pathStat;
-    if (stat(path, &pathStat) != 0) //success = 0
+    if (stat(path, &pathStat) != 0) //poprawne zadzialanie f. = 0
         return 0;
     time_t time = pathStat.st_ctime;
     return time;
@@ -86,7 +86,7 @@ time_t ModificationTime(char *path)
 off_t FileSize(char *path)
 {
     struct stat pathStat;
-    if (stat(path, &pathStat) != 0) //success = 0
+    if (stat(path, &pathStat) != 0) //poprawne zadzialanie f. = 0
         return 0;
     off_t size = pathStat.st_size;
     return size;
@@ -95,7 +95,7 @@ off_t FileSize(char *path)
 mode_t DirectoryMode(char *path)
 {
     struct stat pathStat;
-    if (stat(path, &pathStat) != 0) //success = 0
+    if (stat(path, &pathStat) != 0) //poprawne zadzialanie f. = 0
         return 0;
     mode_t mode = pathStat.st_mode;
     return mode;
@@ -437,6 +437,7 @@ void SyncCopy(char *sourceA, char *destA)
             }
         }
         //jesli w katalogu docelowym nie ma takiego samego pliku/katalogu jak w katalogu zrodlowym
+        //lub jest ale ma starszą datę modyfikacji
         if(allowCopy)
         {
             if (isRegularFile(sourcePath))
