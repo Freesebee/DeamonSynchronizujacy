@@ -218,7 +218,6 @@ int DeleteEntry(char *relativePath)
     }
     else
     {
-        syslog(LOG_NOTICE, "SKIPPING LINK: %s", relativePath); //TODO WYWAL
         return 1;
     }
 
